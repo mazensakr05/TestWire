@@ -126,7 +126,7 @@ testwire generate ./MyApi --controller ProductsController
 
 ## Roadmap
 
-- [x] v0.1 — Black-box generation from controller attributes
+- [ ] v0.1 — Black-box generation from controller attributes
 - [ ] v0.2 — XML doc comment support (richer test names and descriptions)
 - [ ] v0.3 — White-box mode via Roslyn branch analysis
 - [ ] v0.4 — NestJS / TypeScript support
