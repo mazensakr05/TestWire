@@ -1,6 +1,7 @@
 using System.CommandLine;
 using TestWire.cli.Analysis;
 using System.CommandLine.Invocation;
+using TestWire.cli.Generation;
 namespace TestWire.cli.Commands;
 
 public class GenerateCommand : Command
@@ -55,9 +56,22 @@ public class GenerateCommand : Command
 
             foreach (var controller in controllers)
             {
-                Console.WriteLine($"\n Controller: {controller.ClassName}");
-                Console.WriteLine($"  Namespace: {controller.Namespace}");
-                Console.WriteLine($"  BaseRoute: {controller.BaseRoute}");
+                var content = TestFileGenerator.Generate(controller, framework);
+
+                if (dryRun)
+                {
+                    Console.WriteLine("\n--- Generated Test File ---");
+                    Console.WriteLine(content);
+                }
+                else
+                {
+                    var outputDir = output?.FullName ?? Path.Combine(project.DirectoryName!, "TestWire.Generated");
+                    var fileName = $"{controller.ClassName}Tests.cs";
+                    var filePath = Path.Combine(outputDir, fileName);
+
+                    TestFileWriter.Write(filePath, content);
+                    Console.WriteLine($"  ✅ Written → {filePath}");
+                }
 
                 foreach (var endpoint in controller.Endpoints)
                 {
