@@ -11,8 +11,9 @@ public class TestFileGenerator
         
         // using 
         sb.AppendLine("using System;");
-        sb.AppendLine(framework == "nunit" ? "using Nunit.Framework;" : "using Xunit;");
-        sb.AppendLine();
+        sb.AppendLine("using Moq;");
+        sb.AppendLine("using Microsoft.AspNetCore.Mvc;");
+        sb.AppendLine(framework == "nunit" ? "using NUnit.Framework;" : "using Xunit;");        sb.AppendLine();
         
         // NameSpace 
         sb.AppendLine($"namespace {controller.Namespace}.Tests;");
