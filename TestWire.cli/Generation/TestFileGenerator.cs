@@ -11,7 +11,7 @@ public class TestFileGenerator
         
         // using 
         sb.AppendLine("using System;");
-        sb.AppendLine(framework == "nunit" ? "using Nunit.Framework;" : "using Xunit");
+        sb.AppendLine(framework == "nunit" ? "using Nunit.Framework;" : "using Xunit;");
         sb.AppendLine();
         
         // NameSpace 
@@ -27,21 +27,120 @@ public class TestFileGenerator
         {
             var testAttr = framework == "nunit" ? "[Test]" : "[Fact]";
 
-            var testName = $"{endpoint.MethodName}_ReturnsExpectedResult";
-            sb.AppendLine($"    {testAttr}");
-            sb.AppendLine($"    public async Task {testName}()");
-            sb.AppendLine("    {");
-            sb.AppendLine("        // Arrange");
-            sb.AppendLine();
-            sb.AppendLine("        // Act");
-            sb.AppendLine();
-            sb.AppendLine("        // Assert");
-            sb.AppendLine("        throw new NotImplementedException();");
-            sb.AppendLine("    }");
-            sb.AppendLine();
-            
+            WriteHappyPath(sb, endpoint, controller.ClassName, testAttr);
+            WriteBadPath(sb, endpoint, controller.ClassName, testAttr);
+
+            if (endpoint.HasAuthorize)
+                WriteSecurityTest(sb, endpoint, controller.ClassName, testAttr);
         }
         sb.AppendLine("}");
         return sb.ToString();
     }
+
+    private static void WriteHappyPath(StringBuilder sb, EndpointInfo endpoint, string className, string testAttr)
+    {
+        var expectedResult = endpoint.HttpVerb switch
+        {
+            "HttpGet" => "OkObjectResult",
+            "HttpPost" => "CreatedAtActionResult",
+            "HttpPut" => "OkObjectResult",
+            "HttpDelete" => "NoContentResult",
+            _ => "OkObjectResult"
+        };
+
+        var testName = $"{endpoint.MethodName}_Returns{expectedResult.Replace("Result", "")}_WhenSuccessful";
+        var asyncKeyword = endpoint.IsAsync ? "async Task" : "void";
+        var awaitKeyword = endpoint.IsAsync ? "await " : "";
+        var paramValues = string.Join(", ", endpoint.Parameters.Select(p => GetDefaultValue(p.Type)));
+        sb.AppendLine($"    {testAttr}");
+        sb.AppendLine($"    public {asyncKeyword} {testName}()");
+        sb.AppendLine("    {");
+        sb.AppendLine($"        // Arrange");
+        sb.AppendLine($"        var controller = new {className}();");
+        sb.AppendLine();
+        sb.AppendLine($"        // Act");
+        sb.AppendLine($"        var result = {awaitKeyword}controller.{endpoint.MethodName}({paramValues});");
+        sb.AppendLine();
+        sb.AppendLine($"        // Assert");
+        sb.AppendLine($"        Assert.IsType<{expectedResult}>(result);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+    }
+    
+    private static void WriteBadPath(StringBuilder sb, EndpointInfo endpoint, string className, string testAttr)
+    {
+        var expectedResult = endpoint.HttpVerb switch
+        {
+            "HttpGet" => "NotFoundResult",
+            "HttpPost" => "BadRequestObjectResult",
+            "HttpPut" => "BadRequestObjectResult",
+            "HttpDelete" => "NotFoundResult",
+            _ => "BadRequestObjectResult"
+        };
+
+        var testName = $"{endpoint.MethodName}_Returns{expectedResult.Replace("Result", "")}_WhenFailed";
+        var asyncKeyword = endpoint.IsAsync ? "async Task" : "void";
+        var awaitKeyword = endpoint.IsAsync ? "await " : "";
+        var paramValues = string.Join(", ", endpoint.Parameters.Select(p => GetInvalidValue(p.Type)));
+
+        sb.AppendLine($"    {testAttr}");
+        sb.AppendLine($"    public {asyncKeyword} {testName}()");
+        sb.AppendLine("    {");
+        sb.AppendLine($"        // Arrange");
+        sb.AppendLine($"        var controller = new {className}();");
+        sb.AppendLine();
+        sb.AppendLine($"        // Act");
+        sb.AppendLine($"        var result = {awaitKeyword}controller.{endpoint.MethodName}({paramValues});");
+        sb.AppendLine();
+        sb.AppendLine($"        // Assert");
+        sb.AppendLine($"        Assert.IsType<{expectedResult}>(result);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+    }
+    private static void WriteSecurityTest(StringBuilder sb, EndpointInfo endpoint, string className, string testAttr)
+    {
+        var testName = $"{endpoint.MethodName}_Returns401_WhenUnauthorized";
+        var asyncKeyword = endpoint.IsAsync ? "async Task" : "void";
+        var awaitKeyword = endpoint.IsAsync ? "await " : "";
+        var paramValues = string.Join(", ", endpoint.Parameters.Select(p => GetDefaultValue(p.Type)));
+
+        sb.AppendLine($"    {testAttr}");
+        sb.AppendLine($"    public {asyncKeyword} {testName}()");
+        sb.AppendLine("    {");
+        sb.AppendLine($"        // Arrange");
+        sb.AppendLine($"        var controller = new {className}();");
+        sb.AppendLine($"        controller.ControllerContext = new ControllerContext();");
+        sb.AppendLine($"        controller.ControllerContext.HttpContext = new DefaultHttpContext();");
+        sb.AppendLine();
+        sb.AppendLine($"        // Act");
+        sb.AppendLine($"        var result = {awaitKeyword}controller.{endpoint.MethodName}({paramValues});");
+        sb.AppendLine();
+        sb.AppendLine($"        // Assert");
+        sb.AppendLine($"        Assert.IsType<UnauthorizedResult>(result);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+    }
+    
+    private static string GetDefaultValue(string type) => type.ToLower() switch
+    {
+        "int" or "int32" or "int64" or "long"   => "1",
+        "string"                                 => "\"test\"",
+        "bool" or "boolean"                      => "true",
+        "guid"                                   => "Guid.NewGuid()",
+        "datetime"                               => "DateTime.UtcNow",
+        "double" or "float" or "decimal"         => "1.0",
+        _                                        => "null"
+    };
+
+    private static string GetInvalidValue(string type) => type.ToLower() switch
+    {
+        "int" or "int32" or "int64" or "long"   => "-1",
+        "string"                                 => "null",
+        "bool" or "boolean"                      => "false",
+        "guid"                                   => "Guid.Empty",
+        "datetime"                               => "DateTime.MinValue",
+        "double" or "float" or "decimal"         => "-1.0",
+        _                                        => "null"
+    };
 }
