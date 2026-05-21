@@ -58,3 +58,4 @@
 /Users/mazen/Desktop/TestWire/TestWire.cli/obj/Debug/net8.0/TestWire.cli.pdb
 /Users/mazen/Desktop/TestWire/TestWire.cli/obj/Debug/net8.0/TestWire.cli.genruntimeconfig.cache
 /Users/mazen/Desktop/TestWire/TestWire.cli/obj/Debug/net8.0/ref/TestWire.cli.dll
+/Users/mazen/Desktop/TestWire/TestWire.cli/obj/Debug/net8.0/TestWire.cli.sourcelink.json

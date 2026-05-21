@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TestWire.cli")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1cc047dd062957f472f8b49c2e3bbca7a25ddb35")]
 [assembly: System.Reflection.AssemblyProductAttribute("TestWire.cli")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TestWire.cli")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

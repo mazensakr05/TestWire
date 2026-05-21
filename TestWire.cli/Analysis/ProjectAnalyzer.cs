@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis;
 
+
 namespace TestWire.cli.Analysis;
 
 public class ProjectAnalyzer
@@ -38,14 +39,44 @@ public class ProjectAnalyzer
                     var verb = GetHttpVerb(method.AttributeLists);
                     if (verb is null) continue;
 
+                    var returnType = method.ReturnType.ToString();
+                    var isAsync = returnType.StartsWith("Task");
+                    var cleanReturn = returnType
+                        .Replace("Task<", "")
+                        .Replace("ActionResult<", "")
+                        .Replace("IActionResult", "")
+                        .TrimEnd('>');
+
+                    var hasAuthorize = method.AttributeLists
+                                           .SelectMany(a => a.Attributes)
+                                           .Any(a => a.Name.ToString().Contains("Authorize"))
+                                       || classDecl.AttributeLists
+                                           .SelectMany(a => a.Attributes)
+                                           .Any(a => a.Name.ToString().Contains("Authorize"));
+
+                    var parameters = method.ParameterList.Parameters.Select(p => new ParameterDetail
+                    {
+                        Name = p.Identifier.Text,
+                        Type = p.Type?.ToString() ?? "object",
+                        IsFromBody = p.AttributeLists.SelectMany(a => a.Attributes)
+                            .Any(a => a.Name.ToString().Contains("FromBody")),
+                        IsFromRoute = p.AttributeLists.SelectMany(a => a.Attributes)
+                            .Any(a => a.Name.ToString().Contains("FromRoute"))
+                    }).ToList();
+
                     controllerInfo.Endpoints.Add(new EndpointInfo
                     {
                         MethodName = method.Identifier.Text,
                         HttpVerb = verb,
                         Route = GetAttributeArgument(method.AttributeLists, verb)
                                 ?? GetAttributeArgument(method.AttributeLists, "Route")
-                                ?? string.Empty
+                                ?? string.Empty,
+                        ReturnType = cleanReturn.Trim(),
+                        IsAsync = isAsync,
+                        HasAuthorize = hasAuthorize,
+                        Parameters = parameters
                     });
+                        
                 }
 
                 controllers.Add(controllerInfo);
