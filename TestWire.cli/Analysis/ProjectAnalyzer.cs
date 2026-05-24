@@ -31,7 +31,9 @@ public class ProjectAnalyzer
                 {
                     ClassName = classDecl.Identifier.Text,
                     Namespace = GetNamespace(classDecl),
-                    BaseRoute = GetAttributeArgument(classDecl.AttributeLists, "Route") ?? string.Empty
+                    BaseRoute = GetAttributeArgument(classDecl.AttributeLists, "Route") ?? string.Empty,
+                    Dependencies = GetConstructorDependencies(classDecl) 
+
                 };
 
                 foreach (var method in classDecl.Members.OfType<MethodDeclarationSyntax>())
@@ -198,5 +200,21 @@ public class ProjectAnalyzer
                || lower.EndsWith("model")
                || lower.EndsWith("input")
                || lower.EndsWith("payload");
+    }
+
+    private static List<ConstructorDependency> GetConstructorDependencies(ClassDeclarationSyntax classDecl)
+    {
+        var constructor = classDecl.Members
+            .OfType<ConstructorDeclarationSyntax>()
+            .OrderByDescending(c => c.ParameterList.Parameters.Count)
+            .FirstOrDefault();
+
+        if (constructor == null) return new List<ConstructorDependency>();
+
+        return constructor.ParameterList.Parameters.Select(p => new ConstructorDependency
+        {
+            Type = p.Type?.ToString() ?? "object",
+            Name = p.Identifier.Text
+        }).ToList();
     }
 }
