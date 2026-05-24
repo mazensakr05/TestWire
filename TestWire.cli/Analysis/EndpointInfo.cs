@@ -18,4 +18,5 @@ public class ParameterDetail
     public string Type { get; set; } = string.Empty;
     public bool IsFromBody { get; set; }
     public bool IsFromRoute { get; set; }
+    public List<PropertyDetail> DtoProperties { get; set; } = new();
 }

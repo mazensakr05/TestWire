@@ -54,15 +54,32 @@ public class ProjectAnalyzer
                                            .SelectMany(a => a.Attributes)
                                            .Any(a => a.Name.ToString().Contains("Authorize"));
 
-                    var parameters = method.ParameterList.Parameters.Select(p => new ParameterDetail
+                    var parameters = new List<ParameterDetail>();
+
+                    foreach (var p in method.ParameterList.Parameters)
                     {
-                        Name = p.Identifier.Text,
-                        Type = p.Type?.ToString() ?? "object",
-                        IsFromBody = p.AttributeLists.SelectMany(a => a.Attributes)
-                            .Any(a => a.Name.ToString().Contains("FromBody")),
-                        IsFromRoute = p.AttributeLists.SelectMany(a => a.Attributes)
-                            .Any(a => a.Name.ToString().Contains("FromRoute"))
-                    }).ToList();
+                        var param = new ParameterDetail
+                        {
+                            Name = p.Identifier.Text,
+                            Type = p.Type?.ToString() ?? "Object",
+                            IsFromBody = p.AttributeLists.SelectMany(a => a.Attributes)
+                                .Any(a => a.Name.ToString().Contains("FromBody")),
+                            IsFromRoute = p.AttributeLists.SelectMany(a => a.Attributes)
+                                .Any(a => a.Name.ToString().Contains("FromRoute")),
+                        };
+
+                        if (LooksLikeDto(param.Type))
+                        {
+                            var dtoClass = await FindDtoClassAsync(
+                                param.Type, csFiles);
+                            if (dtoClass != null)
+                            {
+                                param.DtoProperties = ReadDtoProperties(dtoClass);
+                            }
+                            
+                        }
+                        parameters.Add(param);
+                    }
 
                     controllerInfo.Endpoints.Add(new EndpointInfo
                     {
@@ -139,5 +156,47 @@ public class ProjectAnalyzer
                    .OfType<FileScopedNamespaceDeclarationSyntax>()
                    .FirstOrDefault()?.Name.ToString()
                ?? string.Empty;
+    }
+
+
+    private static async Task<ClassDeclarationSyntax?> FindDtoClassAsync(string className, List<string> csFiles)
+    {
+        foreach (var file in csFiles)
+        {
+            var source =  await File.ReadAllTextAsync(file);
+            var tree = CSharpSyntaxTree.ParseText(source);
+            var root = await tree.GetRootAsync();
+            
+            var match  = root
+                .DescendantNodes()
+                .OfType<ClassDeclarationSyntax>()
+                .FirstOrDefault(c => c.Identifier.Text == className);
+            if (match != null) 
+                return match;
+        }
+        
+        return null;
+    }
+
+    public static List<PropertyDetail> ReadDtoProperties(ClassDeclarationSyntax dtoClass)
+    {
+        return dtoClass.Members
+            .OfType<PropertyDeclarationSyntax>()
+            .Where(p => p.Modifiers.Any(m => m.Text == "public"))
+            .Select(p => new PropertyDetail
+            {
+                Name = p.Identifier.Text,
+                Type = p.Type.ToString()
+            }).ToList();
+    }
+
+    private static bool LooksLikeDto(string type)
+    {
+        var lower = type.ToLower();
+        return lower.EndsWith("dto")
+               || lower.EndsWith("command")
+               || lower.EndsWith("model")
+               || lower.EndsWith("input")
+               || lower.EndsWith("payload");
     }
 }

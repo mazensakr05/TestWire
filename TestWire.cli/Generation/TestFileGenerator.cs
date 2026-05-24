@@ -1,6 +1,7 @@
 using System.Text;
 using TestWire.cli.Analysis;
 
+
 namespace TestWire.cli.Generation;
 
 public class TestFileGenerator
@@ -52,8 +53,10 @@ public class TestFileGenerator
         var testName = $"{endpoint.MethodName}_Returns{expectedResult.Replace("Result", "")}_WhenSuccessful";
         var asyncKeyword = endpoint.IsAsync ? "async Task" : "void";
         var awaitKeyword = endpoint.IsAsync ? "await " : "";
-        var paramValues = string.Join(", ", endpoint.Parameters.Select(p => GetDefaultValue(p.Type)));
-        sb.AppendLine($"    {testAttr}");
+        var paramValues = string.Join(", ", endpoint.Parameters.Select(p =>
+            p.DtoProperties.Count > 0
+                ? BuildObjectInitializer(p.Type, p.DtoProperties)
+                : GetDefaultValue(p.Type)));        sb.AppendLine($"    {testAttr}");
         sb.AppendLine($"    public {asyncKeyword} {testName}()");
         sb.AppendLine("    {");
         sb.AppendLine($"        // Arrange");
@@ -83,8 +86,10 @@ public class TestFileGenerator
         var testName = $"{endpoint.MethodName}_Returns{expectedResult.Replace("Result", "")}_WhenFailed";
         var asyncKeyword = endpoint.IsAsync ? "async Task" : "void";
         var awaitKeyword = endpoint.IsAsync ? "await " : "";
-        var paramValues = string.Join(", ", endpoint.Parameters.Select(p => GetInvalidValue(p.Type)));
-
+        var paramValues = string.Join(", ", endpoint.Parameters.Select(p =>
+            p.DtoProperties.Count > 0
+                ? BuildObjectInitializer(p.Type, p.DtoProperties)
+                : GetDefaultValue(p.Type)));
         sb.AppendLine($"    {testAttr}");
         sb.AppendLine($"    public {asyncKeyword} {testName}()");
         sb.AppendLine("    {");
@@ -131,7 +136,7 @@ public class TestFileGenerator
         "guid"                                   => "Guid.NewGuid()",
         "datetime"                               => "DateTime.UtcNow",
         "double" or "float" or "decimal"         => "1.0",
-        _                                        => "null"
+        _                                        => "null" // no longer Called for DTOs - Handled Below 
     };
 
     private static string GetInvalidValue(string type) => type.ToLower() switch
@@ -144,4 +149,16 @@ public class TestFileGenerator
         "double" or "float" or "decimal"         => "-1.0",
         _                                        => "null"
     };
+
+    private static string BuildObjectInitializer(string typeName, List<PropertyDetail> properties)
+    {
+        if (properties.Count == 0)
+        {
+            return $"new {typeName}()";
+            
+        }
+
+        var props = string.Join(", ", properties.Select(p => $"{p.Name} = {GetDefaultValue(p.Type)}"));
+        return $"new {typeName}({props})";
+    }
 }
