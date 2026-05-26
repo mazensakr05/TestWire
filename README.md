@@ -159,16 +159,7 @@ This is an early release. Here's what's not supported yet:
 - No `--controller` flag to target a single controller
 - No `.csproj` file is created for the output test folder
 
-These are planned for v0.2. If any of these block you, please [open an issue](https://github.com/mazensakr05/TestWire/issues).
-
----
-
-## Roadmap
-
-- [x] v0.1 — Black-box generation from controller attributes (xUnit + NUnit, Moq, DTO stubs)
-- [ ] v0.2 — Mock `.Setup()` generation + `[FromQuery]`/`[FromHeader]` support
-- [ ] v0.3 — White-box mode via Roslyn branch analysis
-- [ ] v0.4 — Report generation (`--report`)
+If any of these block you, please [open an issue](https://github.com/mazensakr05/TestWire/issues).
 
 ---
 
