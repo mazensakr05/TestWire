@@ -113,7 +113,7 @@ public class TestFileGenerator
         var paramValues = string.Join(", ", endpoint.Parameters.Select(p =>
             p.DtoProperties.Count > 0
                 ? BuildObjectInitializer(p.Type, p.DtoProperties)
-                : GetDefaultValue(p.Type)));
+                : GetInvalidValue(p.Type)));
 
         sb.AppendLine($"    {testAttr}");
         sb.AppendLine($"    public {asyncKeyword} {testName}()");
