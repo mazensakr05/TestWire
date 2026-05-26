@@ -1,10 +1,20 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>testwire</ToolCommandName>
+        <PackageId>testwire</PackageId>
+        <Version>0.1.0</Version>
+        <Authors>Mazen Hassan</Authors>
+        <Description>Generate xUnit/NUnit test stubs from your ASP.NET controllers</Description>
+        <PackageProjectUrl>https://github.com/mazensakr05/TestWire</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/mazensakr05/TestWire</RepositoryUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
     </PropertyGroup>
 
     <ItemGroup>
