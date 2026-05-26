@@ -12,19 +12,7 @@
 
 I built TestWire because once I finish a controller and need to write tests, if they're straightforward I just get bored writing them. I needed something that gives me a template based on my actual controller — not generic stubs, but ones shaped around my specific endpoints and dependencies. So TestWire reads your controller and generates test stubs based on it. You still write the real logic, it just handles the part that's purely mechanical.
 
-```bash
-dotnet tool install -g testwire
-testwire generate --project ./MyApi/MyApi.csproj --output ./tests
-```
 
-```
-Analyzing /path/to/MyApi.csproj...
-  ✅ Written → ./tests/ProductsControllerTests.cs
-    [GET] GetById → api/products/{id}
-    [POST] Create → api/products
-  ✅ Written → ./tests/OrdersControllerTests.cs
-    [DELETE] Delete → api/orders/{id}
-```
 
 ---
 
