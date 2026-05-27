@@ -9,7 +9,7 @@
         <PackAsTool>true</PackAsTool>
         <ToolCommandName>testwire</ToolCommandName>
         <PackageId>testwire</PackageId>
-        <Version>0.1.0</Version>
+        <Version>0.1.1</Version>
         <Authors>Mazen Hassan</Authors>
         <Description>Generate xUnit/NUnit test stubs from your ASP.NET controllers</Description>
         <PackageProjectUrl>https://github.com/mazensakr05/TestWire</PackageProjectUrl>
