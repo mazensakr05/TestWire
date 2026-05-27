@@ -40,6 +40,28 @@ public class TestFileGenerator
         return sb.ToString();
     }
 
+    private static bool IsLoggerDependency(string typeName)
+    {
+        // Strip generic arguments first so dots inside ILogger<TCategoryName> do not affect
+        // extraction of the outer type name from fully-qualified names.
+        var outerType = typeName;
+        var genericStart = outerType.IndexOf('<');
+        if (genericStart >= 0)
+        {
+            outerType = outerType.Substring(0, genericStart);
+        }
+
+        var lastDot = outerType.LastIndexOf('.');
+        var lastAliasSeparator = outerType.LastIndexOf("::");
+        var separatorIndex = Math.Max(lastDot, lastAliasSeparator);
+        var lastSegment = separatorIndex >= 0
+            ? outerType.Substring(separatorIndex + (separatorIndex == lastAliasSeparator ? 2 : 1))
+            : outerType;
+
+        // Match ILogger and ILogger<T> but NOT ILoggerFactory or ILoggerProvider
+        return lastSegment == "ILogger";
+    }
+
     private static void WriteControllerSetup(StringBuilder sb, ControllerInfo controller)
     {
         if (controller.Dependencies.Count == 0)
@@ -48,16 +70,26 @@ public class TestFileGenerator
             return;
         }
 
+        // Generate mock variables — skip ILogger (infrastructure noise, not worth asserting)
         foreach (var dep in controller.Dependencies)
         {
+            if (IsLoggerDependency(dep.Type))
+            {
+                sb.AppendLine($"        // ILogger suppressed by TestWire");
+                continue;
+            }
+
             var mockName = $"mock{char.ToUpper(dep.Name[0])}{dep.Name.Substring(1)}";
             sb.AppendLine($"        var {mockName} = new Mock<{dep.Type}>();");
         }
 
         sb.AppendLine();
 
+        // Build constructor args — ILogger gets Mock.Of<T>() inline instead of a named variable
         var args = string.Join(", ", controller.Dependencies.Select(dep =>
-            $"mock{char.ToUpper(dep.Name[0])}{dep.Name.Substring(1)}.Object"));
+            IsLoggerDependency(dep.Type)
+                ? $"Mock.Of<{dep.Type}>()"
+                : $"mock{char.ToUpper(dep.Name[0])}{dep.Name.Substring(1)}.Object"));
 
         sb.AppendLine($"        var controller = new {controller.ClassName}({args});");
     }
