@@ -50,6 +50,11 @@ public class TestFileGenerator
 
         foreach (var dep in controller.Dependencies)
         {
+            if (dep.Type.StartsWith("ILogger"))
+            {
+                continue;
+            }
+             
             var mockName = $"mock{char.ToUpper(dep.Name[0])}{dep.Name.Substring(1)}";
             sb.AppendLine($"        var {mockName} = new Mock<{dep.Type}>();");
         }
