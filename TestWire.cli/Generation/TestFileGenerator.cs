@@ -40,6 +40,17 @@ public class TestFileGenerator
         return sb.ToString();
     }
 
+    private static bool IsLoggerDependency(string typeName)
+    {
+        // Extract the last segment in case of fully-qualified names (e.g. Microsoft.Extensions.Logging.ILogger<T>)
+        var lastSegment = typeName.Contains('.')
+            ? typeName.Split('.').Last()
+            : typeName;
+
+        // Match ILogger and ILogger<T> but NOT ILoggerFactory or ILoggerProvider
+        return lastSegment == "ILogger" || lastSegment.StartsWith("ILogger<");
+    }
+
     private static void WriteControllerSetup(StringBuilder sb, ControllerInfo controller)
     {
         if (controller.Dependencies.Count == 0)
@@ -48,21 +59,26 @@ public class TestFileGenerator
             return;
         }
 
+        // Generate mock variables — skip ILogger (infrastructure noise, not worth asserting)
         foreach (var dep in controller.Dependencies)
         {
-            if (dep.Type.StartsWith("ILogger"))
+            if (IsLoggerDependency(dep.Type))
             {
+                sb.AppendLine($"        // ILogger suppressed by TestWire");
                 continue;
             }
-             
+
             var mockName = $"mock{char.ToUpper(dep.Name[0])}{dep.Name.Substring(1)}";
             sb.AppendLine($"        var {mockName} = new Mock<{dep.Type}>();");
         }
 
         sb.AppendLine();
 
+        // Build constructor args — ILogger gets Mock.Of<T>() inline instead of a named variable
         var args = string.Join(", ", controller.Dependencies.Select(dep =>
-            $"mock{char.ToUpper(dep.Name[0])}{dep.Name.Substring(1)}.Object"));
+            IsLoggerDependency(dep.Type)
+                ? $"Mock.Of<{dep.Type}>()"
+                : $"mock{char.ToUpper(dep.Name[0])}{dep.Name.Substring(1)}.Object"));
 
         sb.AppendLine($"        var controller = new {controller.ClassName}({args});");
     }
