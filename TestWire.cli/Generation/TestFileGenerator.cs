@@ -42,13 +42,24 @@ public class TestFileGenerator
 
     private static bool IsLoggerDependency(string typeName)
     {
-        // Extract the last segment in case of fully-qualified names (e.g. Microsoft.Extensions.Logging.ILogger<T>)
-        var lastSegment = typeName.Contains('.')
-            ? typeName.Split('.').Last()
-            : typeName;
+        // Strip generic arguments first so dots inside ILogger<TCategoryName> do not affect
+        // extraction of the outer type name from fully-qualified names.
+        var outerType = typeName;
+        var genericStart = outerType.IndexOf('<');
+        if (genericStart >= 0)
+        {
+            outerType = outerType.Substring(0, genericStart);
+        }
+
+        var lastDot = outerType.LastIndexOf('.');
+        var lastAliasSeparator = outerType.LastIndexOf("::");
+        var separatorIndex = Math.Max(lastDot, lastAliasSeparator);
+        var lastSegment = separatorIndex >= 0
+            ? outerType.Substring(separatorIndex + (separatorIndex == lastAliasSeparator ? 2 : 1))
+            : outerType;
 
         // Match ILogger and ILogger<T> but NOT ILoggerFactory or ILoggerProvider
-        return lastSegment == "ILogger" || lastSegment.StartsWith("ILogger<");
+        return lastSegment == "ILogger";
     }
 
     private static void WriteControllerSetup(StringBuilder sb, ControllerInfo controller)
