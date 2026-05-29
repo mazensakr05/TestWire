@@ -118,6 +118,16 @@ public class TestFileGenerator
         sb.AppendLine("    {");
         sb.AppendLine($"        // Arrange");
         WriteControllerSetup(sb, controller);
+        
+        // Setup mocks so they return real values instead of null
+        foreach (var dep in controller.Dependencies)
+        {
+            if (IsLoggerDependency(dep.Type)) continue;
+            var mockName = $"mock{char.ToUpper(dep.Name[0])}{dep.Name.Substring(1)}";
+            var paramSetup = string.Join(", ", endpoint.Parameters.Select(p => $"It.IsAny<{p.Type}>()"));
+            var returnVal = GetDefaultValue(endpoint.ReturnType);
+            sb.AppendLine($"        {mockName}.Setup(x => x.{endpoint.MethodName}({paramSetup})).Returns({returnVal});");
+        }
         sb.AppendLine();
         sb.AppendLine($"        // Act");
         sb.AppendLine($"        var result = {awaitKeyword}controller.{endpoint.MethodName}({paramValues});");
