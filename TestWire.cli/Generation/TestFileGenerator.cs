@@ -250,6 +250,7 @@ public class TestFileGenerator
         var asyncKeyword = endpoint.IsAsync ? "async Task" : "void";
         var awaitKeyword = endpoint.IsAsync ? "await " : "";
         var paramValues = string.Join(", ", endpoint.Parameters.Select(p =>
+            p.IsCancellationToken ? "CancellationToken.None":
             p.DtoProperties.Count > 0
                 ? BuildObjectInitializer(p.Type, p.DtoProperties)
                 : GetDefaultValue(p.Type)));
@@ -285,6 +286,7 @@ public class TestFileGenerator
         var asyncKeyword = endpoint.IsAsync ? "async Task" : "void";
         var awaitKeyword = endpoint.IsAsync ? "await " : "";
         var paramValues = string.Join(", ", endpoint.Parameters.Select(p =>
+            p.IsCancellationToken ? "CancellationToken.None":
             p.DtoProperties.Count > 0
                 ? BuildObjectInitializer(p.Type, p.DtoProperties)
                 : GetInvalidValue(p.Type)));
@@ -311,6 +313,7 @@ public class TestFileGenerator
         var asyncKeyword = endpoint.IsAsync ? "async Task" : "void";
         var awaitKeyword = endpoint.IsAsync ? "await " : "";
         var paramValues = string.Join(", ", endpoint.Parameters.Select(p =>
+            p.IsCancellationToken ? "CancellationToken.None":
             p.DtoProperties.Count > 0
                 ? BuildObjectInitializer(p.Type, p.DtoProperties)
                 : GetDefaultValue(p.Type)));
