@@ -346,6 +346,11 @@ public class ProjectAnalyzer
 
     private static bool MatchesAttribute(string actualName, string shortName)
     {
-        return actualName == shortName || actualName == shortName + "Attribute";
+        var lastSegment = actualName.Contains('.')
+            ? actualName.Substring(actualName.LastIndexOf('.') + 1)
+            : actualName;
+
+        return lastSegment == shortName 
+               || lastSegment == shortName + "Attribute";
     }
 }
