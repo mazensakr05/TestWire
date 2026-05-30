@@ -1,9 +1,7 @@
 using System.Text;
 using TestWire.cli.Analysis;
 
-// Note: ASP.NET Core types (Microsoft.AspNetCore.Mvc, Moq, etc.) appear
-// only as string literals in the generated test output, not as direct
-// references in this file.
+
 
 namespace TestWire.cli.Generation;
 

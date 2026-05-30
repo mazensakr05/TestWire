@@ -160,10 +160,19 @@ public class ProjectAnalyzer
 
         if (result.Count == 0)
         {
-            return constructor.ParameterList.Parameters.Select(p => new ConstructorDependency
+            return constructor.ParameterList.Parameters.Select(p =>
             {
-                Type = p.Type?.ToString() ?? "object",
-                Name = p.Identifier.Text
+                // ask the semantic model for the real full type Name
+
+                var typeSymbol = p.Type is not null
+                    ? semanticModel.GetTypeInfo(p.Type).Type
+                    : null;
+                return new ConstructorDependency
+                {
+                    // use Full Name if availble otherwise FallBack to raw 
+                    Type = typeSymbol?.ToDisplayString() ?? p.Type?.ToString() ?? "object",
+                    Name = p.Identifier.Text
+                };
             }).ToList();
         }
 
