@@ -11,8 +11,6 @@ public class EndpointInfo
 
     public List<ParameterDetail> Parameters { get; set; } = new();
     public List<DependencyCallInfo> DependencyCalls { get; set; } = new();
-    
-    
 }
 
 public class ParameterDetail
@@ -26,10 +24,11 @@ public class ParameterDetail
 
 public class DependencyCallInfo
 {
-    public string DependencyName { get; set; } = string.Empty;  // e.g. productService
-    public string DependencyType { get; set; } = string.Empty;  // e.g. IProductService
-    public string MethodName { get; set; } = string.Empty;      // e.g. GetByIdAsync
-    public List<string> ArgumentTypes { get; set; } = new();    // e.g. ["int", "string"]
-    public string ReturnType { get; set; } = string.Empty;      // e.g. Product
-    public bool IsAsync { get; set; }                           // true = ReturnsAsync
+    public string DependencyName { get; set; } = string.Empty;
+    public string DependencyType { get; set; } = string.Empty;
+    public string MethodName { get; set; } = string.Empty;
+    public List<string> ArgumentExpressions { get; set; } = new();
+    public List<string> ArgumentTypes { get; set; } = new();
+    public string ReturnType { get; set; } = string.Empty;
+    public bool IsAsync { get; set; }
 }
