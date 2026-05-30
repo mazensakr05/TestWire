@@ -15,6 +15,12 @@
         <PackageProjectUrl>https://github.com/mazensakr05/TestWire</PackageProjectUrl>
         <RepositoryUrl>https://github.com/mazensakr05/TestWire</RepositoryUrl>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <!-- MSBuild Locator warns about transitive Microsoft.Build.* refs from Workspaces.MSBuild.
+             These are provided by the SDK at runtime and must not be deployed with the tool. -->
+        <NoWarn>$(NoWarn);MSBL001</NoWarn>
+        <!-- Workspaces.MSBuild transitively pulls Microsoft.Build.* packages.
+             These must not be copied to output (SDK provides them at runtime). -->
+        <DisableMSBuildAssemblyCopyCheck>true</DisableMSBuildAssemblyCopyCheck>
     </PropertyGroup>
 
     <ItemGroup>

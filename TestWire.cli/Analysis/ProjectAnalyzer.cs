@@ -18,7 +18,7 @@ public class ProjectAnalyzer
         if (compilation is null)
             throw new InvalidOperationException($"Failed to compile project: {csprojPath}");
 
-        var typeLookup = BuildTypeLookup(compilation);
+        var typeLookup = BuildTypeLookup((CSharpCompilation)compilation);
         var controllers = new List<ControllerInfo>();
 
         foreach (var document in project.Documents)
@@ -115,21 +115,17 @@ public class ProjectAnalyzer
         return controllers;
     }
 
-    private static Dictionary<string, ClassDeclarationSyntax> BuildTypeLookup(
+    private static Dictionary<string, TypeDeclarationSyntax> BuildTypeLookup(
         CSharpCompilation compilation)
     {
-        var lookup = new Dictionary<string, ClassDeclarationSyntax>();
+        var lookup = new Dictionary<string, TypeDeclarationSyntax>();
 
         foreach (var tree in compilation.SyntaxTrees)
         {
             var root = tree.GetRoot();
-            foreach (var classDecl in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+            foreach (var typeDecl in root.DescendantNodes().OfType<TypeDeclarationSyntax>())
             {
-                lookup.TryAdd(classDecl.Identifier.Text, classDecl);
-            }
-            foreach (var structDecl in root.DescendantNodes().OfType<StructDeclarationSyntax>())
-            {
-                lookup.TryAdd(structDecl.Identifier.Text, structDecl);
+                lookup.TryAdd(typeDecl.Identifier.Text, typeDecl);
             }
         }
 
@@ -177,7 +173,7 @@ public class ProjectAnalyzer
     private static List<DependencyCallInfo> ResolveDependencyCalls(
         MethodDeclarationSyntax method,
         List<ConstructorDependency> dependencies,
-        CSharpCompilation compilation)
+        Compilation compilation)
     {
         var calls = new List<DependencyCallInfo>();
         var invocations = method.DescendantNodes().OfType<InvocationExpressionSyntax>();
@@ -187,7 +183,7 @@ public class ProjectAnalyzer
             if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
                 continue;
 
-            var expressionSymbol = semanticModel: compilation
+            var expressionSymbol = compilation
                 .GetSemanticModel(invocation.SyntaxTree)
                 .GetSymbolInfo(memberAccess.Expression).Symbol;
 
@@ -225,12 +221,16 @@ public class ProjectAnalyzer
 
             if (methodSymbol.ReturnType is INamedTypeSymbol namedReturn &&
                 namedReturn.IsGenericType &&
-                namedReturn.ConstructedFrom.ToDisplayString() == "System.Threading.Tasks.Task<T>")
+                namedReturn.TypeArguments.Length == 1)
             {
-                returnType = namedReturn.TypeArguments[0].ToDisplayString();
-                isAsync = true;
+                var constructedFrom = namedReturn.ConstructedFrom;
+                if (constructedFrom.Name == "Task")
+                {
+                    returnType = namedReturn.TypeArguments[0].ToDisplayString();
+                    isAsync = true;
+                }
             }
-            else if (methodSymbol.ReturnType.ToDisplayString() == "System.Threading.Tasks.Task")
+            else if (methodSymbol.ReturnType.Name == "Task")
             {
                 returnType = "void";
                 isAsync = true;
@@ -286,9 +286,11 @@ public class ProjectAnalyzer
     }
 
     private static ClassDeclarationSyntax? FindDtoClassByName(
-        string className, Dictionary<string, ClassDeclarationSyntax> typeLookup)
+        string className, Dictionary<string, TypeDeclarationSyntax> typeLookup)
     {
-        return typeLookup.TryGetValue(className, out var classDecl) ? classDecl : null;
+        return typeLookup.TryGetValue(className, out var typeDecl) && typeDecl is ClassDeclarationSyntax classDecl
+            ? classDecl
+            : null;
     }
 
     public static List<PropertyDetail> ReadDtoProperties(ClassDeclarationSyntax dtoClass)
