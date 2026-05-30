@@ -1,8 +1,6 @@
 using System.Text;
 using TestWire.cli.Analysis;
 
-
-
 namespace TestWire.cli.Generation;
 
 public class TestFileGenerator
@@ -21,15 +19,12 @@ public class TestFileGenerator
         sb.AppendLine("using Microsoft.AspNetCore.Mvc.Abstractions;");
         sb.AppendLine("using Microsoft.AspNetCore.Mvc.Controllers;");
         sb.AppendLine("using Microsoft.AspNetCore.Mvc.Filters;");
-        sb.AppendLine("using Moq;");
-        sb.AppendLine(framework == "nunit" ? "using NUnit.Framework;" : "using Xunit;");
-
         var hasNonLoggerDeps = controller.Dependencies.Any(d => !IsLoggerDependency(d.Type));
-        if (!hasNonLoggerDeps)
-        {
-            sb.Replace("using Moq;\n", "");
-        }
 
+        if (hasNonLoggerDeps)
+            sb.AppendLine("using Moq;");
+
+        sb.AppendLine(framework == "nunit" ? "using NUnit.Framework;" : "using Xunit;");
         // Derive DTO namespace from controller namespace convention
         // e.g., SampleApi.Controllers → SampleApi.DTOs
         var controllerNs = controller.Namespace;
@@ -140,8 +135,8 @@ public class TestFileGenerator
             "void" or "" => "new object()",
             _ when lower.Contains("list<") => $"new {ExtractCollectionType(clean, "System.Collections.Generic.List")}()",
             _ when lower.Contains("ilist<") => $"new {ExtractCollectionType(clean, "System.Collections.Generic.List")}()",
-            _ when lower.Contains("iCollection<") => $"new {ExtractCollectionType(clean, "System.Collections.Generic.List")}()",
-            _ when lower.Contains("iEnumerable<") => $"new {ExtractCollectionType(clean, "System.Collections.Generic.List")}()",
+            _ when lower.Contains("icollection<") => $"new {ExtractCollectionType(clean, "System.Collections.Generic.List")}()",
+            _ when lower.Contains("ienumerable<") => $"new {ExtractCollectionType(clean, "System.Collections.Generic.List")}()",
             _ => $"new {CleanTypeName(clean)}()"
         };
     }

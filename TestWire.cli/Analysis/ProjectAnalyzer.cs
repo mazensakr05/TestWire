@@ -7,13 +7,12 @@ namespace TestWire.cli.Analysis;
 
 public class ProjectAnalyzer
 {
-    private static MSBuildWorkspace? _workspace;
 
     public static async Task<List<ControllerInfo>> AnalyzeAsync(string csprojPath)
     {
-        _workspace = MSBuildWorkspace.Create();
+       using var workspace = MSBuildWorkspace.Create();
 
-        var project = await _workspace.OpenProjectAsync(csprojPath);
+        var project = await workspace.OpenProjectAsync(csprojPath);
         var compilation = await project.GetCompilationAsync();
         if (compilation is null)
             throw new InvalidOperationException($"Failed to compile project: {csprojPath}");
@@ -61,10 +60,10 @@ public class ProjectAnalyzer
 
                     var hasAuthorize = method.AttributeLists
                                                .SelectMany(a => a.Attributes)
-                                               .Any(a => a.Name.ToString() == "Authorize")
+                                               .Any(a => MatchesAttribute(a.Name.ToString() , "Authorize"))
                                            || classDecl.AttributeLists
                                                .SelectMany(a => a.Attributes)
-                                               .Any(a => a.Name.ToString() == "Authorize");
+                                               .Any(a => MatchesAttribute(a.Name.ToString() , "Authorize"));
 
                     var parameters = new List<ParameterDetail>();
                     foreach (var p in method.ParameterList.Parameters)
@@ -74,9 +73,9 @@ public class ProjectAnalyzer
                             Name = p.Identifier.Text,
                             Type = p.Type?.ToString() ?? "Object",
                             IsFromBody = p.AttributeLists.SelectMany(a => a.Attributes)
-                                .Any(a => a.Name.ToString() == "FromBody"),
+                                .Any(a => MatchesAttribute(a.Name.ToString() , "FromBody")),
                             IsFromRoute = p.AttributeLists.SelectMany(a => a.Attributes)
-                                .Any(a => a.Name.ToString() == "FromRoute"),
+                                .Any(a => MatchesAttribute(a.Name.ToString() , "FromRoute")),
                         };
 
                         if (LooksLikeDto(param.Type))
@@ -186,14 +185,13 @@ public class ProjectAnalyzer
     {
         var calls = new List<DependencyCallInfo>();
         var invocations = method.DescendantNodes().OfType<InvocationExpressionSyntax>();
-
+        var semanticModel = compilation.GetSemanticModel(method.SyntaxTree);
         foreach (var invocation in invocations)
         {
             if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
                 continue;
 
-            var expressionSymbol = compilation
-                .GetSemanticModel(invocation.SyntaxTree)
+            var expressionSymbol = semanticModel
                 .GetSymbolInfo(memberAccess.Expression).Symbol;
 
             if (expressionSymbol is null) continue;
@@ -213,8 +211,7 @@ public class ProjectAnalyzer
 
             if (matchingDep is null) continue;
 
-            var methodSymbol = compilation
-                .GetSemanticModel(invocation.SyntaxTree)
+            var methodSymbol = semanticModel
                 .GetSymbolInfo(invocation).Symbol as IMethodSymbol;
 
             if (methodSymbol is null) continue;
@@ -345,5 +342,10 @@ public class ProjectAnalyzer
             : outerType;
 
         return lastSegment == "ILogger";
+    }
+
+    private static bool MatchesAttribute(string actualName, string shortName)
+    {
+        return actualName == shortName || actualName == shortName + "Attribute";
     }
 }

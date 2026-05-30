@@ -1,6 +1,5 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# 
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestWire.cli", "TestWire.cli\TestWire.cli.csproj", "{C0C1E4BA-B555-4A0A-ABEB-1EB1FDA3A392}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SampleApi", "SampleApi\SampleApi.csproj", "{CF9BB5E7-7DCC-4F39-B5B8-ACA5153AFCC6}"
