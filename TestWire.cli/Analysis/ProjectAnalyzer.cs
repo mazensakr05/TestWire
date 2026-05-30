@@ -76,7 +76,7 @@ public class ProjectAnalyzer
                                 .Any(a => MatchesAttribute(a.Name.ToString() , "FromBody")),
                             IsFromRoute = p.AttributeLists.SelectMany(a => a.Attributes)
                                 .Any(a => MatchesAttribute(a.Name.ToString() , "FromRoute")),
-                            IsCancellationToken = p.Type?.ToString() == "CancellationToken",
+                            IsCancellationToken = p.Type is {} t && (t.ToString()== "CancellationToken" || t.ToString().EndsWith("CancellationToken")),
                             
                         };
 

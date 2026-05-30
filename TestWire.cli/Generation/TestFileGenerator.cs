@@ -19,6 +19,8 @@ public class TestFileGenerator
         sb.AppendLine("using Microsoft.AspNetCore.Mvc.Abstractions;");
         sb.AppendLine("using Microsoft.AspNetCore.Mvc.Controllers;");
         sb.AppendLine("using Microsoft.AspNetCore.Mvc.Filters;");
+        if (controller.Endpoints.Any(e => e.Parameters.Any(p => p.IsCancellationToken)))
+            sb.AppendLine(" using System.Threading;");
         var hasNonLoggerDeps = controller.Dependencies.Any(d => !IsLoggerDependency(d.Type));
 
         if (hasNonLoggerDeps)
