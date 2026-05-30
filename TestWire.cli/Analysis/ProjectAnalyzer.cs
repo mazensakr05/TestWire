@@ -27,12 +27,13 @@ public class ProjectAnalyzer
 
             foreach (var classDecl in classDeclarations)
             {
+                var dependencies = GetConstructorDependencies(classDecl); 
                 var controllerInfo = new ControllerInfo
                 {
                     ClassName = classDecl.Identifier.Text,
                     Namespace = GetNamespace(classDecl),
                     BaseRoute = GetAttributeArgument(classDecl.AttributeLists, "Route") ?? string.Empty,
-                    Dependencies = GetConstructorDependencies(classDecl) 
+                    Dependencies = dependencies 
 
                 };
 
@@ -93,7 +94,8 @@ public class ProjectAnalyzer
                         ReturnType = cleanReturn.Trim(),
                         IsAsync = isAsync,
                         HasAuthorize = hasAuthorize,
-                        Parameters = parameters
+                        Parameters = parameters,
+                        DependencyCalls = GetDependencyCalls(method, dependencies)
                     });
                         
                 }
@@ -216,5 +218,49 @@ public class ProjectAnalyzer
             Type = p.Type?.ToString() ?? "object",
             Name = p.Identifier.Text
         }).ToList();
+    }
+    
+    private static List<DependencyCallInfo> GetDependencyCalls(
+        MethodDeclarationSyntax method,
+        List<ConstructorDependency> dependencies)
+    {
+        var dependencyNames = dependencies
+            .Select(d => d.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var calls = new List<DependencyCallInfo>();
+
+        var invocations = method.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>();
+
+        foreach (var invocation in invocations)
+        {
+            if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+                continue;
+
+            var target = memberAccess.Expression.ToString().TrimStart('_');
+            if (!dependencyNames.Contains(target))
+                continue;
+
+            var dependency = dependencies.First(d =>
+                string.Equals(d.Name, target, StringComparison.OrdinalIgnoreCase));
+
+            var methodName = memberAccess.Name.Identifier.Text;
+            var argumentTypes = invocation.ArgumentList.Arguments
+                .Select(a => a.Expression.ToString())
+                .ToList();
+
+            calls.Add(new DependencyCallInfo
+            {
+                DependencyName = dependency.Name,
+                DependencyType = dependency.Type,
+                MethodName = methodName,
+                ArgumentTypes = argumentTypes,
+                ReturnType = string.Empty,
+                IsAsync = methodName.EndsWith("Async")
+            });
+        }
+
+        return calls;
     }
 }
