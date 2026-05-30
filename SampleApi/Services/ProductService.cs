@@ -1,3 +1,4 @@
+using SampleApi.DTOs;
 using SampleApi.Models;
 
 public class ProductService : IProductService

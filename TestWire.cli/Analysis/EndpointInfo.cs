@@ -10,6 +10,7 @@ public class EndpointInfo
     public bool HasAuthorize { get; set; }
 
     public List<ParameterDetail> Parameters { get; set; } = new();
+    public List<DependencyCallInfo> DependencyCalls { get; set; } = new();
 }
 
 public class ParameterDetail
@@ -19,4 +20,15 @@ public class ParameterDetail
     public bool IsFromBody { get; set; }
     public bool IsFromRoute { get; set; }
     public List<PropertyDetail> DtoProperties { get; set; } = new();
+}
+
+public class DependencyCallInfo
+{
+    public string DependencyName { get; set; } = string.Empty;
+    public string DependencyType { get; set; } = string.Empty;
+    public string MethodName { get; set; } = string.Empty;
+    public List<string> ArgumentExpressions { get; set; } = new();
+    public List<string> ArgumentTypes { get; set; } = new();
+    public string ReturnType { get; set; } = string.Empty;
+    public bool IsAsync { get; set; }
 }
