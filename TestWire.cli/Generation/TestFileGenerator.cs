@@ -142,8 +142,8 @@ public class TestFileGenerator
             "void" or "" => "new object()",
             _ when lower.Contains("list<") => $"new {ExtractCollectionType(clean, "System.Collections.Generic.List")}()",
             _ when lower.Contains("ilist<") => $"new {ExtractCollectionType(clean, "System.Collections.Generic.List")}()",
-            _ when lower.Contains("ICollection<") => $"new {ExtractCollectionType(clean, "System.Collections.Generic.List")}()",
-            _ when lower.Contains("IEnumerable<") => $"new {ExtractCollectionType(clean, "System.Collections.Generic.List")}()",
+            _ when lower.Contains("iCollection<") => $"new {ExtractCollectionType(clean, "System.Collections.Generic.List")}()",
+            _ when lower.Contains("iEnumerable<") => $"new {ExtractCollectionType(clean, "System.Collections.Generic.List")}()",
             _ => $"new {CleanTypeName(clean)}()"
         };
     }
