@@ -43,11 +43,7 @@ public class ProjectAnalyzer
 
                     var returnType = method.ReturnType.ToString();
                     var isAsync = returnType.StartsWith("Task");
-                    var cleanReturn = returnType
-                        .Replace("Task<", "")
-                        .Replace("ActionResult<", "")
-                        .Replace("IActionResult", "")
-                        .TrimEnd('>');
+                    var cleanReturn = UnwrapReturnType(returnType);
 
                     var hasAuthorize = method.AttributeLists
                                            .SelectMany(a => a.Attributes)
@@ -216,5 +212,28 @@ public class ProjectAnalyzer
             Type = p.Type?.ToString() ?? "object",
             Name = p.Identifier.Text
         }).ToList();
+    }
+
+    private static string UnwrapReturnType(string returnType)
+    {
+        var type = returnType.Trim();
+
+        string[] outerWrappers = ["Task<", "ActionResult<"];
+
+        foreach (var wrapper in outerWrappers)
+        {
+            if (type.StartsWith(wrapper) && type.EndsWith(">"))
+            {
+                var inner = type.Substring(wrapper.Length, type.Length - wrapper.Length - 1);
+                return UnwrapReturnType(inner);
+            }
+        }
+        
+        // iACtionResult has no inner type - return empty 
+
+        if (type == "IActionResult" || type == "Task") return string.Empty;
+
+        return type;
+
     }
 }
