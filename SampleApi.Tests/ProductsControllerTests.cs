@@ -1,6 +1,8 @@
 using System;
 using Moq;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
+using SampleApi.DTOs;
 using Xunit;
 
 namespace SampleApi.Controllers.Tests;
@@ -76,7 +78,7 @@ public class ProductsControllerTests
         var controller = new ProductsController(mockService.Object);
 
         // Act
-        var result = await controller.Create(new CreateProductDto { Name = "test", Price = 1.0, IsActive = true });
+        var result = await controller.Create(new CreateProductDto { Name = "test", Price = 1.0M, IsActive = true });
 
         // Assert
         Assert.IsType<CreatedAtActionResult>(result);
@@ -91,7 +93,7 @@ public class ProductsControllerTests
         var controller = new ProductsController(mockService.Object);
 
         // Act
-        var result = await controller.Create(new CreateProductDto { Name = "test", Price = 1.0, IsActive = true });
+        var result = await controller.Create(new CreateProductDto { Name = "test", Price = 1.0M, IsActive = true });
 
         // Assert
         Assert.IsType<BadRequestObjectResult>(result);
@@ -108,7 +110,7 @@ public class ProductsControllerTests
         controller.ControllerContext.HttpContext = new DefaultHttpContext();
 
         // Act
-        var result = await controller.Create(new CreateProductDto { Name = "test", Price = 1.0, IsActive = true });
+        var result = await controller.Create(new CreateProductDto { Name = "test", Price = 1.0M, IsActive = true });
 
         // Assert
         Assert.IsType<UnauthorizedResult>(result);
@@ -123,7 +125,7 @@ public class ProductsControllerTests
         var controller = new ProductsController(mockService.Object);
 
         // Act
-        var result = await controller.Update(1, new UpdateProductDto { Name = "test", Price = 1.0 });
+        var result = await controller.Update(1, new UpdateProductDto { Name = "test", Price = 1.0M });
 
         // Assert
         Assert.IsType<OkObjectResult>(result);
@@ -138,7 +140,7 @@ public class ProductsControllerTests
         var controller = new ProductsController(mockService.Object);
 
         // Act
-        var result = await controller.Update(-1, new UpdateProductDto { Name = "test", Price = 1.0 });
+        var result = await controller.Update(-1, new UpdateProductDto { Name = "test", Price = 1.0M });
 
         // Assert
         Assert.IsType<BadRequestObjectResult>(result);
@@ -155,7 +157,7 @@ public class ProductsControllerTests
         controller.ControllerContext.HttpContext = new DefaultHttpContext();
 
         // Act
-        var result = await controller.Update(1, new UpdateProductDto { Name = "test", Price = 1.0 });
+        var result = await controller.Update(1, new UpdateProductDto { Name = "test", Price = 1.0M });
 
         // Assert
         Assert.IsType<UnauthorizedResult>(result);

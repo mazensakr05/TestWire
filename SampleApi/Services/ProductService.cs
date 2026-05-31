@@ -1,4 +1,5 @@
 using SampleApi.Models;
+using SampleApi.DTOs;
 
 public class ProductService : IProductService
 {
@@ -16,8 +17,7 @@ public class ProductService : IProductService
         {
             Id = _products.Count + 1,
             Name = dto.Name,
-            Price = dto.Price,
-            IsActive = dto.IsActive
+            Price = dto.Price
         };
         _products.Add(product);
         return Task.FromResult(product);

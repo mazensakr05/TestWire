@@ -2,6 +2,7 @@ using System.CommandLine;
 using TestWire.cli.Analysis;
 using System.CommandLine.Invocation;
 using TestWire.cli.Generation;
+
 namespace TestWire.cli.Commands;
 
 public class GenerateCommand : Command
@@ -54,28 +55,39 @@ public class GenerateCommand : Command
                 return;
             }
 
-            foreach (var controller in controllers)
+            if (dryRun)
             {
-                var content = TestFileGenerator.Generate(controller, framework);
-
-                if (dryRun)
+                foreach (var controller in controllers)
                 {
+                    var content = TestFileGenerator.Generate(controller, framework);
                     Console.WriteLine("\n--- Generated Test File ---");
                     Console.WriteLine(content);
+
+                    foreach (var endpoint in controller.Endpoints)
+                    {
+                        Console.WriteLine($"    [{endpoint.HttpVerb}] {endpoint.MethodName} → {endpoint.Route}");
+                    }
                 }
-                else
+            }
+            else
+            {
+                var projectName = Path.GetFileNameWithoutExtension(project.FullName);
+                var outputDir = output?.FullName ?? Path.GetFullPath(Path.Combine(project.DirectoryName!, "..", $"{projectName}.Tests"));
+                TestProjectGenerator.Generate(project.FullName, outputDir);
+
+                foreach (var controller in controllers)
                 {
-                    var outputDir = output?.FullName ?? Path.Combine(project.DirectoryName!, "TestWire.Generated");
+                    var content = TestFileGenerator.Generate(controller, framework);
                     var fileName = $"{controller.ClassName}Tests.cs";
                     var filePath = Path.Combine(outputDir, fileName);
 
                     TestFileWriter.Write(filePath, content);
                     Console.WriteLine($"  ✅ Written → {filePath}");
-                }
 
-                foreach (var endpoint in controller.Endpoints)
-                {
-                    Console.WriteLine($"    [{endpoint.HttpVerb}] {endpoint.MethodName} → {endpoint.Route}");
+                    foreach (var endpoint in controller.Endpoints)
+                    {
+                        Console.WriteLine($"    [{endpoint.HttpVerb}] {endpoint.MethodName} → {endpoint.Route}");
+                    }
                 }
             }
         });
