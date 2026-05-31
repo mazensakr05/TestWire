@@ -12,8 +12,6 @@
 
 I built TestWire because once I finish a controller and need to write tests, if they're straightforward I just get bored writing them. I needed something that gives me a template based on my actual controller — not generic stubs, but ones shaped around my specific endpoints and dependencies. So TestWire reads your controller and generates test stubs based on it. You still write the real logic, it just handles the part that's purely mechanical.
 
-
-
 ---
 
 ## What Gets Generated
@@ -142,14 +140,20 @@ testwire generate --project ./MyApi/MyApi.csproj --framework nunit
 
 ---
 
-## Current Limitations (v0.1)
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the full history of changes.
+
+---
+
+## Current Limitations (v0.1.2)
 
 This is an early release. Here's what's not supported yet:
 
 - `[FromQuery]` and `[FromHeader]` parameters are not yet analyzed
-- Mock setup (`.Setup(...)`) is not generated — stubs use default mock behavior
+- No `.csproj` file is generated for the output test folder — you need to add one manually
 - No `--controller` flag to target a single controller
-- No `.csproj` file is created for the output test folder
+- Mock `.Setup(...)` uses default behavior — explicit return values coming in v0.2
 
 If any of these block you, please [open an issue](https://github.com/mazensakr05/TestWire/issues).
 
