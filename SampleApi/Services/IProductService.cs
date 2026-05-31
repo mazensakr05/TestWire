@@ -1,5 +1,5 @@
 using SampleApi.Models;
-
+using SampleApi.DTOs;
 public interface IProductService
 {
     Task<List<Product>> GetAllAsync();

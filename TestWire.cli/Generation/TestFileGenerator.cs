@@ -13,6 +13,9 @@ public class TestFileGenerator
         sb.AppendLine("using System;");
         sb.AppendLine("using Moq;");
         sb.AppendLine("using Microsoft.AspNetCore.Mvc;");
+        sb.AppendLine("using Microsoft.AspNetCore.Http;");
+        var projectNamespace = controller.Namespace.Replace(".Controllers", "");
+        sb.AppendLine($"using {projectNamespace}.DTOs;");
         sb.AppendLine(framework == "nunit" ? "using NUnit.Framework;" : "using Xunit;");
         sb.AppendLine();
 
@@ -196,7 +199,8 @@ public class TestFileGenerator
         "bool" or "boolean"                    => "true",
         "guid"                                 => "Guid.NewGuid()",
         "datetime"                             => "DateTime.UtcNow",
-        "double" or "float" or "decimal"       => "1.0",
+        "decimal"            => "1.0M",
+        "double" or "float"  => "1.0",
         _                                      => "null"
     };
 
@@ -207,8 +211,8 @@ public class TestFileGenerator
         "bool" or "boolean"                    => "false",
         "guid"                                 => "Guid.Empty",
         "datetime"                             => "DateTime.MinValue",
-        "double" or "float" or "decimal"       => "-1.0",
-        _                                      => "null"
+        "decimal"            => "-1.0M",
+        "double" or "float"  => "-1.0",        _                                      => "null"
     };
 
     private static string BuildObjectInitializer(string typeName, List<PropertyDetail> properties)
