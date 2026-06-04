@@ -3,8 +3,8 @@ namespace TestWire.cli.Analysis;
 public enum ReturnTypeKind {
 Unknown ,
 ActionResultOfT,
-IActionResultWithInferredT,
-IActionResultWithDataFlow
+IActionResultWithInferredT
+
 }
 
 public class EndpointInfo

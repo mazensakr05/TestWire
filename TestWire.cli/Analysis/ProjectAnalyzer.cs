@@ -1,24 +1,34 @@
-using System.Xml.Linq;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.MSBuild;
 
 
 namespace TestWire.cli.Analysis;
 
 public class ProjectAnalyzer
 {
-    public static async Task<List<ControllerInfo>> AnalyzeAsync(string csprojPath)
+   public static async Task<List<ControllerInfo>> AnalyzeAsync( string csprojPath)
     {
-        var projectDir = Path.GetDirectoryName(csprojPath)!;
-        var csFiles = GetCsFiles(csprojPath, projectDir);
-        var controllers = new List<ControllerInfo>();
+       var controllers = new List<ControllerInfo>();
 
-        foreach (var file in csFiles)
+        using var workspace = MSBuildWorkspace.Create();
+        var project = await workspace.OpenProjectAsync(csprojPath);
+        var compilation = await project.GetCompilationAsync();
+
+        if(compilation == null)
+            throw new Exception("Failed to compile project.");
+
+        foreach(var document in project.Documents)
         {
-            var source = await File.ReadAllTextAsync(file);
-            var tree = CSharpSyntaxTree.ParseText(source);
-            var root = await tree.GetRootAsync();
+            // skip files in OBJ folder
+            if(document.FilePath.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") == true)
+                continue;
+
+            var syntexTree = await document.GetSyntaxTreeAsync();
+            if(syntexTree == null) continue;
+            var root = await syntexTree.GetRootAsync();
+            var semanticModel = compilation.GetSemanticModel(syntexTree);
 
             var classDeclarations = root
                 .DescendantNodes()
@@ -27,213 +37,193 @@ public class ProjectAnalyzer
 
             foreach (var classDecl in classDeclarations)
             {
+                var classSymbol = semanticModel.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
+                if (classSymbol == null) continue;
+
                 var controllerInfo = new ControllerInfo
                 {
-                    ClassName = classDecl.Identifier.Text,
-                    Namespace = GetNamespace(classDecl),
-                    BaseRoute = GetAttributeArgument(classDecl.AttributeLists, "Route") ?? string.Empty,
-                    Dependencies = GetConstructorDependencies(classDecl) 
-
+                    ClassName = classSymbol.Name,
+                    Namespace = classSymbol.ContainingNamespace?.ToDisplayString(),
+                    BaseRoute = GetAttributeArgument(classSymbol, "Route") ?? string.Empty,
+                    Dependencies = GetConstructorDependencies(classSymbol),
                 };
 
-                foreach (var method in classDecl.Members.OfType<MethodDeclarationSyntax>())
+                foreach (var member in classSymbol.GetMembers().OfType<IMethodSymbol>())
                 {
-                    var verb = GetHttpVerb(method.AttributeLists);
+                    var verb = GetHttpVerb(member);
                     if (verb is null) continue;
 
-                    var returnType = method.ReturnType.ToString();
-                    var isAsync = returnType.StartsWith("Task");
-                    var cleanReturn = UnwrapReturnType(returnType);
-
-                    var hasAuthorize = method.AttributeLists
-                                           .SelectMany(a => a.Attributes)
-                                           .Any(a => a.Name.ToString().Contains("Authorize"))
-                                       || classDecl.AttributeLists
-                                           .SelectMany(a => a.Attributes)
-                                           .Any(a => a.Name.ToString().Contains("Authorize"));
-
-                    var parameters = new List<ParameterDetail>();
-
-                    foreach (var p in method.ParameterList.Parameters)
+                    var endpointInfo = new EndpointInfo
                     {
-                        var param = new ParameterDetail
+                        MethodName = member.Name,
+                        HttpVerb = verb,
+                        Route = GetAttributeArgument(member, verb)
+                                       ?? GetAttributeArgument(member, "Route")
+                                       ?? string.Empty,
+                        IsAsync = member.IsAsync,
+                        HasAuthorize = HasAttribute(member, "Authorize")
+                                       || HasAttribute(classSymbol, "Authorize"),
+                        ReturnType = UnwrapReturnType(member.ReturnType),
+                        Parameters = new List<ParameterDetail>()
+                    };
+
+                    foreach (var param in member.Parameters)
+                    {
+                        var paramDetail = new ParameterDetail
                         {
-                            Name = p.Identifier.Text,
-                            Type = p.Type?.ToString() ?? "Object",
-                            IsFromBody = p.AttributeLists.SelectMany(a => a.Attributes)
-                                .Any(a => a.Name.ToString().Contains("FromBody")),
-                            IsFromRoute = p.AttributeLists.SelectMany(a => a.Attributes)
-                                .Any(a => a.Name.ToString().Contains("FromRoute")),
+                            Name = param.Name,
+                            Type = param.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
+                            IsFromBody = HasAttribute(param, "FromBody"),
+                            IsFromRoute = HasAttribute(param, "FromRoute")
                         };
 
-                        if (LooksLikeDto(param.Type))
+                        if (param.Type is INamedTypeSymbol paramTypeSymbol
+                            && IsComplexUserType(param.Type))
                         {
-                            var dtoClass = await FindDtoClassAsync(
-                                param.Type, csFiles);
-                            if (dtoClass != null)
-                            {
-                                param.DtoProperties = ReadDtoProperties(dtoClass);
-                            }
-                            
+                            paramDetail.DtoProperties = ReadDtoProperties(paramTypeSymbol);
                         }
-                        parameters.Add(param);
+
+                        endpointInfo.Parameters.Add(paramDetail);
                     }
 
-                    controllerInfo.Endpoints.Add(new EndpointInfo
-                    {
-                        MethodName = method.Identifier.Text,
-                        HttpVerb = verb,
-                        Route = GetAttributeArgument(method.AttributeLists, verb)
-                                ?? GetAttributeArgument(method.AttributeLists, "Route")
-                                ?? string.Empty,
-                        ReturnType = cleanReturn.Trim(),
-                        IsAsync = isAsync,
-                        HasAuthorize = hasAuthorize,
-                        Parameters = parameters
-                    });
-                        
+                    controllerInfo.Endpoints.Add(endpointInfo);
                 }
-
                 controllers.Add(controllerInfo);
+
+
             }
         }
 
         return controllers;
+
     }
 
-    private static List<string> GetCsFiles(string csprojPath, string projectDir)
+   
+
+    public static List<PropertyDetail> ReadDtoProperties(INamedTypeSymbol typeSymbol)
     {
-        var doc = XDocument.Load(csprojPath);
-        var ns = doc.Root?.Name.Namespace ?? XNamespace.None;
+        var list = new List<PropertyDetail>();
 
-        // Check for explicit Compile includes
-        var explicitFiles = doc.Descendants(ns + "Compile")
-            .Select(e => e.Attribute("Include")?.Value)
-            .Where(v => v != null)
-            .Select(v => Path.GetFullPath(Path.Combine(projectDir, v!)))
-            .ToList();
-
-        if (explicitFiles.Count > 0)
-            return explicitFiles;
-
-        // Default: grab all .cs files recursively (SDK-style projects)
-        return Directory.GetFiles(projectDir, "*.cs", SearchOption.AllDirectories)
-            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
-            .ToList();
-    }
-
-    private static string? GetHttpVerb(SyntaxList<AttributeListSyntax> attributeLists)
-    {
-        string[] verbs = ["HttpGet", "HttpPost", "HttpPut", "HttpDelete", "HttpPatch"];
-
-        foreach (var attrList in attributeLists)
-            foreach (var attr in attrList.Attributes)
-                if (verbs.Contains(attr.Name.ToString()))
-                    return attr.Name.ToString();
-
-        return null;
-    }
-
-    private static string? GetAttributeArgument(SyntaxList<AttributeListSyntax> attributeLists, string attributeName)
-    {
-        foreach (var attrList in attributeLists)
-            foreach (var attr in attrList.Attributes)
-                if (attr.Name.ToString() == attributeName)
-                    return attr.ArgumentList?.Arguments.FirstOrDefault()
-                        ?.ToString().Trim('"');
-
-        return null;
-    }
-
-    private static string GetNamespace(ClassDeclarationSyntax classDecl)
-    {
-        return classDecl.Ancestors()
-                   .OfType<NamespaceDeclarationSyntax>()
-                   .FirstOrDefault()?.Name.ToString()
-               ?? classDecl.Ancestors()
-                   .OfType<FileScopedNamespaceDeclarationSyntax>()
-                   .FirstOrDefault()?.Name.ToString()
-               ?? string.Empty;
-    }
-
-
-    private static async Task<ClassDeclarationSyntax?> FindDtoClassAsync(string className, List<string> csFiles)
-    {
-        foreach (var file in csFiles)
+        foreach (var member in typeSymbol.GetMembers().OfType<IPropertySymbol>())
         {
-            var source =  await File.ReadAllTextAsync(file);
-            var tree = CSharpSyntaxTree.ParseText(source);
-            var root = await tree.GetRootAsync();
-            
-            var match  = root
-                .DescendantNodes()
-                .OfType<ClassDeclarationSyntax>()
-                .FirstOrDefault(c => c.Identifier.Text == className);
-            if (match != null) 
-                return match;
-        }
-        
-        return null;
-    }
-
-    public static List<PropertyDetail> ReadDtoProperties(ClassDeclarationSyntax dtoClass)
-    {
-        return dtoClass.Members
-            .OfType<PropertyDeclarationSyntax>()
-            .Where(p => p.Modifiers.Any(m => m.Text == "public"))
-            .Select(p => new PropertyDetail
+            if (member.DeclaredAccessibility == Accessibility.Public && !member.IsStatic)
             {
-                Name = p.Identifier.Text,
-                Type = p.Type.ToString()
-            }).ToList();
-    }
-
-    private static bool LooksLikeDto(string type)
-    {
-        var lower = type.ToLower();
-        return lower.EndsWith("dto")
-               || lower.EndsWith("command")
-               || lower.EndsWith("model")
-               || lower.EndsWith("input")
-               || lower.EndsWith("payload");
-    }
-
-    private static List<ConstructorDependency> GetConstructorDependencies(ClassDeclarationSyntax classDecl)
-    {
-        var constructor = classDecl.Members
-            .OfType<ConstructorDeclarationSyntax>()
-            .OrderByDescending(c => c.ParameterList.Parameters.Count)
-            .FirstOrDefault();
-
-        if (constructor == null) return new List<ConstructorDependency>();
-
-        return constructor.ParameterList.Parameters.Select(p => new ConstructorDependency
-        {
-            Type = p.Type?.ToString() ?? "object",
-            Name = p.Identifier.Text
-        }).ToList();
-    }
-
-    private static string UnwrapReturnType(string returnType)
-    {
-        var type = returnType.Trim();
-
-        string[] outerWrappers = ["Task<", "ActionResult<"];
-
-        foreach (var wrapper in outerWrappers)
-        {
-            if (type.StartsWith(wrapper) && type.EndsWith(">"))
-            {
-                var inner = type.Substring(wrapper.Length, type.Length - wrapper.Length - 1);
-                return UnwrapReturnType(inner);
+                list.Add(new PropertyDetail
+                {
+                    Name = member.Name,
+                    Type = member.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
+                });
             }
         }
-        
-        // iACtionResult has no inner type - return empty 
-
-        if (type == "IActionResult" || type == "Task") return string.Empty;
-
-        return type;
+        return list;
 
     }
+
+    
+
+    private static List<ConstructorDependency> GetConstructorDependencies(INamedTypeSymbol classSymbol)
+    {
+        var constructors = classSymbol.Constructors;
+
+        if (constructors.Length == 0) return new List<ConstructorDependency>();
+
+        var primary = constructors.OrderByDescending(c => c.Parameters.Length).First();
+        var dependencies = new List<ConstructorDependency>();
+        foreach ( var parameter in primary.Parameters) {
+           
+            
+                dependencies.Add(new ConstructorDependency
+                {
+                    Name = parameter.Name,
+                    Type = parameter.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
+                });
+            
+        }
+        return dependencies;
+    }
+
+    private static string UnwrapReturnType(ITypeSymbol typeSymbol)
+    {
+        string [] names  = ["Task", "ActionResult", "IActionResult"];
+        // Cast attempt
+        if (typeSymbol is not INamedTypeSymbol namedType)
+            return typeSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+        // Check for Task<T>
+        if (names.Contains(namedType.Name)){
+
+            if (namedType.TypeArguments.Length > 0) {
+
+                return UnwrapReturnType(namedType.TypeArguments[0]);
+
+
+            }
+            else return string.Empty;
+
+
+        }
+        return namedType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+
+
+    }
+
+    private static bool HasAttribute(ISymbol symbol, string attributeName)
+    {
+        foreach (var attr in symbol.GetAttributes())
+        {
+            var name = attr.AttributeClass?.Name;
+            if (name == null ) continue;
+            var cleanName = name.EndsWith("Attribute") ? name.Substring(0, name.Length - 9) : name;
+      
+            if (cleanName == attributeName)
+                return true;
+        }
+        return false;
+    }
+
+    private static string? GetAttributeArgument(ISymbol symbol , string attributeName)
+    {
+        foreach (var attr in symbol.GetAttributes())
+        {
+            var name = attr.AttributeClass?.Name;
+            if (name == null ) continue;
+            var cleanName = name.EndsWith("Attribute") ? name.Substring(0, name.Length - 9) : name;
+            if(cleanName == attributeName && attr.ConstructorArguments.Length > 0)
+                return attr.ConstructorArguments[0].Value?.ToString();
+
+        }
+        return null;
+    }
+
+    private static string? GetHttpVerb (IMethodSymbol methodSymbol)
+    {
+        string [] verbs = ["HttpGet", "HttpPost", "HttpPut", "HttpDelete", "HttpPatch"];
+        foreach (var verb in verbs)
+        {
+            if (HasAttribute(methodSymbol, verb))
+                return verb;
+        }
+        return null;
+    }
+
+    private static bool IsComplexUserType(ITypeSymbol typeSymbol)
+    {
+        // condition 1 : if its a primitive STOP ! 
+
+        if (typeSymbol.SpecialType != SpecialType.None)
+        {
+            return false;
+
+        }
+        // Condition 2 — if it's a System/Microsoft type, stop
+        var ns = typeSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+        if (ns.StartsWith("System") || ns.StartsWith("Microsoft"))
+            return false;
+
+        // Condition 3 — must be a class or struct
+        return typeSymbol.TypeKind == TypeKind.Class ||
+               typeSymbol.TypeKind == TypeKind.Struct;
+
+    }
+
+
 }
