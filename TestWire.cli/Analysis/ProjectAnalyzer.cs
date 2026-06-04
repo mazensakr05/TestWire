@@ -58,11 +58,12 @@ public class ProjectAnalyzer
                         MethodName = member.Name,
                         HttpVerb = verb,
                         Route = GetAttributeArgument(member, verb)
-                                       ?? GetAttributeArgument(member, "Route")
-                                       ?? string.Empty,
+                         ?? GetAttributeArgument(member, "Route")
+                         ?? string.Empty,
                         IsAsync = member.IsAsync,
-                        HasAuthorize = HasAttribute(member, "Authorize")
-                                       || HasAttribute(classSymbol, "Authorize"),
+                        HasAllowAnonymous = HasAttribute(member, "AllowAnonymous"),
+                        HasAuthorize = (HasAttribute(member, "Authorize") || HasAttribute(classSymbol, "Authorize"))
+                         && !HasAttribute(member, "AllowAnonymous"),
                         ReturnType = UnwrapReturnType(member.ReturnType),
                         Parameters = new List<ParameterDetail>()
                     };
