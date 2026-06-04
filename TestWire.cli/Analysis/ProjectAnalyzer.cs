@@ -74,7 +74,8 @@ public class ProjectAnalyzer
                             Name = param.Name,
                             Type = param.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
                             IsFromBody = HasAttribute(param, "FromBody"),
-                            IsFromRoute = HasAttribute(param, "FromRoute")
+                            IsFromRoute = HasAttribute(param, "FromRoute"),
+                            IsFromQuery = HasAttribute(param, "FromQuery")
                         };
 
                         if (param.Type is INamedTypeSymbol paramTypeSymbol
