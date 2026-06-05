@@ -53,18 +53,33 @@ public class ProjectAnalyzer
                     var verb = GetHttpVerb(member);
                     if (verb is null) continue;
 
+                   var unwrapped = UnwrapReturnType(member.ReturnType);
+
+                    // layer 2 - producesResponseType Attribute
+
+                    if (string.IsNullOrEmpty(unwrapped)){
+                        unwrapped = GetProducesResponseDetails(member)
+                            .FirstOrDefault(r => r.StatusCode == 200)?.TypeName
+                            ?? string.Empty;
+                    }
+
+                    // layer 3 - try to infer from return statements in method body
+                    if (string.IsNullOrEmpty(unwrapped))
+                    {
+                        unwrapped = await TryInferReturnTypeFromBody(member, semanticModel) ?? string.Empty;
+                    }
                     var endpointInfo = new EndpointInfo
                     {
                         MethodName = member.Name,
                         HttpVerb = verb,
                         Route = GetAttributeArgument(member, verb)
-                         ?? GetAttributeArgument(member, "Route")
-                         ?? string.Empty,
+                        ?? GetAttributeArgument(member, "Route")
+                        ?? string.Empty,
                         IsAsync = member.IsAsync,
                         HasAllowAnonymous = HasAttribute(member, "AllowAnonymous"),
                         HasAuthorize = (HasAttribute(member, "Authorize") || HasAttribute(classSymbol, "Authorize"))
-                         && !HasAttribute(member, "AllowAnonymous"),
-                        ReturnType = UnwrapReturnType(member.ReturnType),
+                        && !HasAttribute(member, "AllowAnonymous"),
+                        ReturnType = unwrapped,
                         ProducesResponses = GetProducesResponseDetails(member),
                         Parameters = new List<ParameterDetail>()
                     };
@@ -271,6 +286,39 @@ public class ProjectAnalyzer
             result.Add(detail);
         }
         return result;
+    }
+
+
+    private static async Task<string?> TryInferReturnTypeFromBody(IMethodSymbol methodSymbol, SemanticModel semanticModel)
+    {
+        var syntaxRef = methodSymbol.DeclaringSyntaxReferences.FirstOrDefault();
+        if (syntaxRef == null) return null;
+        var methodSyntax = await syntaxRef.GetSyntaxAsync() as MethodDeclarationSyntax;
+        if (methodSyntax?.Body is null) return null;
+
+        var resultMethods = new HashSet<string> { "Ok", "Created", "CreatedAtAction", "CreatedAtRoute", "Accepted", "AcceptedAtAction" };
+
+        var returnStatements = methodSyntax.Body.DescendantNodes().OfType<ReturnStatementSyntax>();
+
+        foreach (var returnStatement in returnStatements)
+        {
+            if (returnStatement.Expression is not InvocationExpressionSyntax invocation) continue;
+            
+            var methodName =  invocation.Expression is MemberAccessExpressionSyntax memberAccess ? memberAccess.Name.Identifier.Text : (invocation.Expression as IdentifierNameSyntax)?.Identifier.Text;
+
+            if (methodName is null || !resultMethods.Contains(methodName)) continue;
+
+            var arg = invocation.ArgumentList.Arguments.FirstOrDefault();
+            if(arg == null) continue;
+
+            var typeInfo = semanticModel.GetTypeInfo(arg.Expression);
+            if(typeInfo.Type is null ) continue;
+
+            return typeInfo.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+
+        }
+
+        return null;
     }
 
 
