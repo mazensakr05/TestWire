@@ -3,6 +3,11 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+    <!--
+      Required for MSBuildWorkspace to load correctly at runtime via MSBuildLocator.
+      Without this, MSBuild assembly conflicts can cause runtime errors when the tool
+      opens a .csproj. This is a known requirement for MSBuildWorkspace-based tools.
+    -->
     <DisableMSBuildAssemblyCopyCheck>true</DisableMSBuildAssemblyCopyCheck>
     <AssemblyName>testwire</AssemblyName>
     <RootNamespace>TestWire</RootNamespace>

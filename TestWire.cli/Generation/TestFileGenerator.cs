@@ -113,7 +113,7 @@ public class TestFileGenerator
         var awaitKeyword = endpoint.IsAsync ? "await " : "";
         var paramValues = string.Join(", ", endpoint.Parameters.Select(p =>
             p.DtoProperties.Count > 0
-                ? BuildObjectInitializer(p.Type, p.DtoProperties)
+                ? BuildObjectInitializer(p.FullyQualifiedType, p.DtoProperties)
                 : GetDefaultValue(p.Type)));
 
         sb.AppendLine($"    {testAttr}");
@@ -147,7 +147,7 @@ public class TestFileGenerator
         var awaitKeyword = endpoint.IsAsync ? "await " : "";
         var paramValues = string.Join(", ", endpoint.Parameters.Select(p =>
             p.DtoProperties.Count > 0
-                ? BuildObjectInitializer(p.Type, p.DtoProperties)
+                ? BuildObjectInitializer(p.FullyQualifiedType, p.DtoProperties)
                 : GetInvalidValue(p.Type)));
 
         sb.AppendLine($"    {testAttr}");
@@ -172,7 +172,7 @@ public class TestFileGenerator
         var awaitKeyword = endpoint.IsAsync ? "await " : "";
         var paramValues = string.Join(", ", endpoint.Parameters.Select(p =>
             p.DtoProperties.Count > 0
-                ? BuildObjectInitializer(p.Type, p.DtoProperties)
+                ? BuildObjectInitializer(p.FullyQualifiedType, p.DtoProperties)
                 : GetDefaultValue(p.Type)));
 
         sb.AppendLine($"    {testAttr}");

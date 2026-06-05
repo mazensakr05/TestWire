@@ -87,16 +87,27 @@ public class ProjectAnalyzer
                                     && n.TypeArguments.Length == 1
                                     && (n.TypeArguments[0] as INamedTypeSymbol)?.Name == "ActionResult"));
 
+                        var isIActionResult = originalType is INamedTypeSymbol m
+                            && (m.Name == "IActionResult"
+                                || (m.Name == "Task"
+                                    && m.TypeArguments.Length == 1
+                                    && (m.TypeArguments[0] as INamedTypeSymbol)?.Name == "IActionResult"));
+
                         returnTypeKind = isActionResultOfT
                             ? ReturnTypeKind.ActionResultOfT
-                            : ReturnTypeKind.IActionResultWithInferredT;
+                            : isIActionResult
+                                ? ReturnTypeKind.IActionResultWithInferredT
+                                : ReturnTypeKind.PlainType;
                     }
+
+                    // Compute once — reused for both Layer 2 inference and endpoint assignment
+                    var producesResponses = GetProducesResponseDetails(member);
 
                     // Layer 2: check [ProducesResponseType(typeof(T), 200)] attribute
                     // catches IActionResult methods that declare their type via attribute
                     if (string.IsNullOrEmpty(unwrapped))
                     {
-                        unwrapped = GetProducesResponseDetails(member)
+                        unwrapped = producesResponses
                             .FirstOrDefault(r => r.StatusCode == 200)?.TypeName
                             ?? string.Empty;
 
@@ -108,7 +119,7 @@ public class ProjectAnalyzer
                     // asks the Semantic Model what type x is at each return statement
                     if (string.IsNullOrEmpty(unwrapped))
                     {
-                        unwrapped = await TryInferReturnTypeFromBody(member, semanticModel)
+                        unwrapped = await TryInferReturnTypeFromBody(member, compilation)
                                     ?? string.Empty;
 
                         if (!string.IsNullOrEmpty(unwrapped))
@@ -130,7 +141,7 @@ public class ProjectAnalyzer
                                             && !HasAttribute(member, "AllowAnonymous"),
                         ReturnType = unwrapped,
                         ReturnTypeKind = returnTypeKind,
-                        ProducesResponses = GetProducesResponseDetails(member),
+                        ProducesResponses = producesResponses,
                         Parameters = new List<ParameterDetail>()
                     };
 
@@ -138,10 +149,12 @@ public class ProjectAnalyzer
 
                     foreach (var param in member.Parameters)
                     {
+                        var typeDisplay = GetTypeDisplayInfo(param.Type);
                         var paramDetail = new ParameterDetail
                         {
                             Name = param.Name,
-                            Type = param.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                            Type = typeDisplay.Type,
+                            FullyQualifiedType = typeDisplay.FullyQualifiedType,
                             IsFromBody = HasAttribute(param, "FromBody"),
                             IsFromRoute = HasAttribute(param, "FromRoute"),
                             IsFromQuery = HasAttribute(param, "FromQuery")
@@ -184,10 +197,12 @@ public class ProjectAnalyzer
                 && setMethod is not null
                 && setMethod.DeclaredAccessibility == Accessibility.Public)
             {
+                var typeDisplay = GetTypeDisplayInfo(member.Type);
                 list.Add(new PropertyDetail
                 {
                     Name = member.Name,
-                    Type = member.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    Type = typeDisplay.Type,
+                    FullyQualifiedType = typeDisplay.FullyQualifiedType
                 });
             }
         }
@@ -206,10 +221,11 @@ public class ProjectAnalyzer
 
         foreach (var parameter in primary.Parameters)
         {
+            var typeDisplay = GetTypeDisplayInfo(parameter.Type);
             dependencies.Add(new ConstructorDependency
             {
                 Name = parameter.Name,
-                Type = parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                Type = typeDisplay.FullyQualifiedType
             });
         }
 
@@ -222,7 +238,7 @@ public class ProjectAnalyzer
         string[] wrappers = ["Task", "ActionResult", "IActionResult"];
 
         if (typeSymbol is not INamedTypeSymbol namedType)
-            return typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            return typeSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
 
         if (wrappers.Contains(namedType.Name))
         {
@@ -233,7 +249,19 @@ public class ProjectAnalyzer
                 : string.Empty; // plain Task / IActionResult — no type info
         }
 
-        return namedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        return namedType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+    }
+
+    private static (string Type, string FullyQualifiedType) GetTypeDisplayInfo(ITypeSymbol typeSymbol)
+    {
+        var type = typeSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+
+        var fullyQualifiedType = typeSymbol.SpecialType != SpecialType.None
+            ? type
+            : typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                .Replace("global::", string.Empty);
+
+        return (type, fullyQualifiedType);
     }
 
     private static bool HasAttribute(ISymbol symbol, string attributeName)
@@ -324,7 +352,7 @@ public class ProjectAnalyzer
             {
                 var typeSymbol = attr.ConstructorArguments[0].Value as ITypeSymbol;
                 detail.TypeName = typeSymbol?
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    .ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
 
                 if (attr.ConstructorArguments.Length > 1)
                     detail.StatusCode = (int)(attr.ConstructorArguments[1].Value ?? 200);
@@ -344,13 +372,15 @@ public class ProjectAnalyzer
 
     private static async Task<string?> TryInferReturnTypeFromBody(
         IMethodSymbol methodSymbol,
-        SemanticModel semanticModel)
+        Compilation compilation)
     {
         var syntaxRef = methodSymbol.DeclaringSyntaxReferences.FirstOrDefault();
         if (syntaxRef == null) return null;
 
         var methodSyntax = await syntaxRef.GetSyntaxAsync() as MethodDeclarationSyntax;
         if (methodSyntax == null) return null;
+
+        var correctModel = compilation.GetSemanticModel(methodSyntax.SyntaxTree);
 
         var resultMethods = new HashSet<string>
             { "Ok", "Created", "CreatedAtAction", "CreatedAtRoute", "Accepted", "AcceptedAtAction" };
@@ -388,11 +418,11 @@ public class ProjectAnalyzer
             if (arg == null) continue;
 
             // Ask the compiler what type this argument expression resolves to
-            var typeInfo = semanticModel.GetTypeInfo(arg.Expression);
+            var typeInfo = correctModel.GetTypeInfo(arg.Expression);
             if (typeInfo.Type is null) continue;
 
             return typeInfo.Type
-                .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                .ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
         }
 
         return null;
