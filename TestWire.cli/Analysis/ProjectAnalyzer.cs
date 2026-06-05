@@ -268,12 +268,12 @@ public class ProjectAnalyzer
             return false;
 
         }
-        // Condition 2  if it's a System/Microsoft type, stop
+        // Condition 2 - if it's a System/Microsoft type, stop
         var ns = typeSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty;
         if (ns.StartsWith("System") || ns.StartsWith("Microsoft"))
             return false;
 
-        // Condition 3  must be a class or struct
+        // Condition 3 - must be a class or struct
         return typeSymbol.TypeKind == TypeKind.Class ||
                typeSymbol.TypeKind == TypeKind.Struct;
 
