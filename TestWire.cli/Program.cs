@@ -1,7 +1,8 @@
 ﻿using System.CommandLine;
 using TestWire.cli.Commands;
 
-Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
+if (!Microsoft.Build.Locator.MSBuildLocator.IsRegistered)
+	Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
 
 
 var rootCommand = new RootCommand("TestWire - Auto-generate integration test stubs for ASP.NET Core controllers");

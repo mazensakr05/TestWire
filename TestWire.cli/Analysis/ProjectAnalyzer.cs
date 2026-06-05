@@ -57,7 +57,7 @@ public class ProjectAnalyzer
                 var controllerInfo = new ControllerInfo
                 {
                     ClassName = classSymbol.Name,
-                    Namespace = classSymbol.ContainingNamespace?.ToDisplayString(),
+                    Namespace = classSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty,
                     BaseRoute = GetAttributeArgument(classSymbol, "Route") ?? string.Empty,
                     Dependencies = GetConstructorDependencies(classSymbol),
                 };
@@ -81,8 +81,13 @@ public class ProjectAnalyzer
                     {
                         // Only mark as ActionResultOfT if the signature actually
                         // contained ActionResult<T> — not a plain DTO return type
-                        var originalName = (originalType as INamedTypeSymbol)?.Name ?? string.Empty;
-                        returnTypeKind = originalName.Contains("ActionResult")
+                        var isActionResultOfT = originalType is INamedTypeSymbol n
+                            && (n.Name == "ActionResult"
+                                || (n.Name == "Task"
+                                    && n.TypeArguments.Length == 1
+                                    && (n.TypeArguments[0] as INamedTypeSymbol)?.Name == "ActionResult"));
+
+                        returnTypeKind = isActionResultOfT
                             ? ReturnTypeKind.ActionResultOfT
                             : ReturnTypeKind.IActionResultWithInferredT;
                     }
@@ -136,7 +141,7 @@ public class ProjectAnalyzer
                         var paramDetail = new ParameterDetail
                         {
                             Name = param.Name,
-                            Type = param.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
+                            Type = param.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                             IsFromBody = HasAttribute(param, "FromBody"),
                             IsFromRoute = HasAttribute(param, "FromRoute"),
                             IsFromQuery = HasAttribute(param, "FromQuery")
@@ -182,7 +187,7 @@ public class ProjectAnalyzer
                 list.Add(new PropertyDetail
                 {
                     Name = member.Name,
-                    Type = member.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
+                    Type = member.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                 });
             }
         }
@@ -204,7 +209,7 @@ public class ProjectAnalyzer
             dependencies.Add(new ConstructorDependency
             {
                 Name = parameter.Name,
-                Type = parameter.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
+                Type = parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             });
         }
 
@@ -217,7 +222,7 @@ public class ProjectAnalyzer
         string[] wrappers = ["Task", "ActionResult", "IActionResult"];
 
         if (typeSymbol is not INamedTypeSymbol namedType)
-            return typeSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+            return typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
         if (wrappers.Contains(namedType.Name))
         {
@@ -228,7 +233,7 @@ public class ProjectAnalyzer
                 : string.Empty; // plain Task / IActionResult — no type info
         }
 
-        return namedType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+        return namedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
     }
 
     private static bool HasAttribute(ISymbol symbol, string attributeName)
@@ -319,7 +324,7 @@ public class ProjectAnalyzer
             {
                 var typeSymbol = attr.ConstructorArguments[0].Value as ITypeSymbol;
                 detail.TypeName = typeSymbol?
-                    .ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
                 if (attr.ConstructorArguments.Length > 1)
                     detail.StatusCode = (int)(attr.ConstructorArguments[1].Value ?? 200);
@@ -347,18 +352,28 @@ public class ProjectAnalyzer
         var methodSyntax = await syntaxRef.GetSyntaxAsync() as MethodDeclarationSyntax;
         if (methodSyntax == null) return null;
 
-        // Fix: handle both block bodies { return Ok(x); }
-        // and expression bodies => Ok(x);
-        var searchRoot = (SyntaxNode?)methodSyntax.Body ?? methodSyntax.ExpressionBody;
-        if (searchRoot == null) return null;
-
         var resultMethods = new HashSet<string>
             { "Ok", "Created", "CreatedAtAction", "CreatedAtRoute", "Accepted", "AcceptedAtAction" };
 
-        // Search for ALL invocations — covers both return statements and expression bodies
-        var invocations = searchRoot
-            .DescendantNodesAndSelf()
-            .OfType<InvocationExpressionSyntax>();
+        IEnumerable<InvocationExpressionSyntax> invocations;
+
+        // Block body — only invocations directly inside a return statement
+        if (methodSyntax.Body != null)
+        {
+            invocations = methodSyntax.Body
+                .DescendantNodes()
+                .OfType<ReturnStatementSyntax>()
+                .Select(r => r.Expression)
+                .OfType<InvocationExpressionSyntax>();
+        }
+        // Expression body — the single expression IS the return
+        else if (methodSyntax.ExpressionBody != null)
+        {
+            invocations = methodSyntax.ExpressionBody
+                .DescendantNodesAndSelf()
+                .OfType<InvocationExpressionSyntax>();
+        }
+        else return null;
 
         foreach (var invocation in invocations)
         {
@@ -377,7 +392,7 @@ public class ProjectAnalyzer
             if (typeInfo.Type is null) continue;
 
             return typeInfo.Type
-                .ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+                .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         }
 
         return null;
