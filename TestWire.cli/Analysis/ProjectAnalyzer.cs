@@ -354,9 +354,9 @@ public class ProjectAnalyzer
                 detail.TypeName = typeSymbol?
                     .ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
 
-                if (attr.ConstructorArguments.Length > 1)
-                    detail.StatusCode = (int)(attr.ConstructorArguments[1].Value ?? 200);
-            }
+                detail.StatusCode = attr.ConstructorArguments.Length > 1
+                    ? (int)(attr.ConstructorArguments[1].Value ?? 200)
+                    : 200;
             // Case 2: [ProducesResponseType(404)]
             else if (attr.ConstructorArguments[0].Kind == TypedConstantKind.Primitive)
             {
