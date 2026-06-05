@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
@@ -12,6 +12,8 @@ public class ProjectAnalyzer
     {
         var controllers = new List<ControllerInfo>();
 
+        // Open the real .csproj using MSBuild — this gives us full type resolution
+        // across all referenced projects and NuGet packages
         using var workspace = MSBuildWorkspace.Create();
         var project = await workspace.OpenProjectAsync(csprojPath);
         var compilation = await project.GetCompilationAsync();
@@ -21,15 +23,20 @@ public class ProjectAnalyzer
 
         foreach (var document in project.Documents)
         {
-            // skip files in OBJ folder
-            if (document.FilePath.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") == true)
+            // Skip generated files in the obj/ folder — we only want user-written code
+            if (document.FilePath?.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") == true)
                 continue;
 
-            var syntexTree = await document.GetSyntaxTreeAsync();
-            if (syntexTree == null) continue;
-            var root = await syntexTree.GetRootAsync();
-            var semanticModel = compilation.GetSemanticModel(syntexTree);
+            var syntaxTree = await document.GetSyntaxTreeAsync();
+            if (syntaxTree == null) continue;
 
+            var root = await syntaxTree.GetRootAsync();
+
+            // SemanticModel ties this file's syntax to the full compilation
+            // This is what lets us resolve types across the entire project
+            var semanticModel = compilation.GetSemanticModel(syntaxTree);
+
+            // Find all classes ending in "Controller" in this file
             var classDeclarations = root
                 .DescendantNodes()
                 .OfType<ClassDeclarationSyntax>()
@@ -37,6 +44,7 @@ public class ProjectAnalyzer
 
             foreach (var classDecl in classDeclarations)
             {
+                // Cross from syntax → symbol — now we have full compiler knowledge
                 var classSymbol = semanticModel.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
                 if (classSymbol == null) continue;
 
@@ -48,41 +56,66 @@ public class ProjectAnalyzer
                     Dependencies = GetConstructorDependencies(classSymbol),
                 };
 
+                // Iterate methods via symbol — not syntax — for full attribute resolution
                 foreach (var member in classSymbol.GetMembers().OfType<IMethodSymbol>())
                 {
+                    // Only process methods decorated with an HTTP verb attribute
                     var verb = GetHttpVerb(member);
                     if (verb is null) continue;
 
-                   var unwrapped = UnwrapReturnType(member.ReturnType);
+                    // --- Three-Layer Return Type Resolution ---
 
-                    // layer 2 - producesResponseType Attribute
+                    // Layer 1: read directly from the method signature
+                    // e.g. Task<ActionResult<ProductDto>> → "ProductDto"
+                    var unwrapped = UnwrapReturnType(member.ReturnType);
+                    var returnTypeKind = ReturnTypeKind.Unknown;
 
-                    if (string.IsNullOrEmpty(unwrapped)){
+                    if (!string.IsNullOrEmpty(unwrapped))
+                        returnTypeKind = ReturnTypeKind.ActionResultOfT;
+
+                    // Layer 2: check [ProducesResponseType(typeof(T), 200)] attribute
+                    // catches IActionResult methods that declare their type via attribute
+                    if (string.IsNullOrEmpty(unwrapped))
+                    {
                         unwrapped = GetProducesResponseDetails(member)
                             .FirstOrDefault(r => r.StatusCode == 200)?.TypeName
                             ?? string.Empty;
+
+                        if (!string.IsNullOrEmpty(unwrapped))
+                            returnTypeKind = ReturnTypeKind.IActionResultWithInferredT;
                     }
 
-                    // layer 3 - try to infer from return statements in method body
+                    // Layer 3: crawl the method body for return Ok(x), Created(x) etc.
+                    // asks the Semantic Model what type x is at each return statement
                     if (string.IsNullOrEmpty(unwrapped))
                     {
-                        unwrapped = await TryInferReturnTypeFromBody(member, semanticModel) ?? string.Empty;
+                        unwrapped = await TryInferReturnTypeFromBody(member, semanticModel)
+                                    ?? string.Empty;
+
+                        if (!string.IsNullOrEmpty(unwrapped))
+                            returnTypeKind = ReturnTypeKind.IActionResultWithInferredT;
                     }
+
+                    // --- Build Endpoint ---
+
                     var endpointInfo = new EndpointInfo
                     {
                         MethodName = member.Name,
                         HttpVerb = verb,
                         Route = GetAttributeArgument(member, verb)
-                        ?? GetAttributeArgument(member, "Route")
-                        ?? string.Empty,
+                                            ?? GetAttributeArgument(member, "Route")
+                                            ?? string.Empty,
                         IsAsync = member.IsAsync,
                         HasAllowAnonymous = HasAttribute(member, "AllowAnonymous"),
                         HasAuthorize = (HasAttribute(member, "Authorize") || HasAttribute(classSymbol, "Authorize"))
-                        && !HasAttribute(member, "AllowAnonymous"),
+                                            && !HasAttribute(member, "AllowAnonymous"),
                         ReturnType = unwrapped,
+                        ReturnTypeKind = returnTypeKind,
                         ProducesResponses = GetProducesResponseDetails(member),
                         Parameters = new List<ParameterDetail>()
                     };
+
+                    // --- Build Parameters ---
 
                     foreach (var param in member.Parameters)
                     {
@@ -95,6 +128,8 @@ public class ProjectAnalyzer
                             IsFromQuery = HasAttribute(param, "FromQuery")
                         };
 
+                        // If the parameter is a user-defined class (DTO, Command, etc.)
+                        // read its public properties so the generator can build request objects
                         if (param.Type is INamedTypeSymbol paramTypeSymbol
                             && IsComplexUserType(param.Type))
                         {
@@ -106,14 +141,12 @@ public class ProjectAnalyzer
 
                     controllerInfo.Endpoints.Add(endpointInfo);
                 }
+
                 controllers.Add(controllerInfo);
-
-
             }
         }
 
         return controllers;
-
     }
 
 
