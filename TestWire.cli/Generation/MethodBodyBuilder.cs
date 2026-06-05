@@ -67,22 +67,15 @@ public static class MethodBodyBuilder
 
     private static string BuildTestName(EndpointInfo endpoint)
     {
-        var verb = endpoint.HttpVerb switch
-        {
-            "HttpGet" => "Get",
-            "HttpPost" => "Create",
-            "HttpPut" => "Update",
-            "HttpDelete" => "Delete",
-            "HttpPatch" => "Patch",
-            _ => endpoint.HttpVerb
-        };
-
         var returnPart = string.IsNullOrEmpty(endpoint.ReturnType)
             ? ""
-            : $"_With{endpoint.ReturnType.Replace("<", "Of").Replace(">", "")}";
+            : $"_With{CapitalizeFirst(endpoint.ReturnType.Replace("<", "Of").Replace(">", ""))}";
 
-        return $"{verb}{endpoint.MethodName}_Returns200{returnPart}";
+        return $"{endpoint.MethodName}_Returns200{returnPart}";
     }
+
+    private static string CapitalizeFirst(string s) =>
+        string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..];
 
     private static string GetTestValueForType(string type) => type.ToLowerInvariant() switch
     {

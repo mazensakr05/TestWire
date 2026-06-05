@@ -9,6 +9,9 @@ public class ProjectAnalyzer
 {
     public static async Task<List<ControllerInfo>> AnalyzeAsync(string csprojPath)
     {
+
+        if (!Microsoft.Build.Locator.MSBuildLocator.IsRegistered)
+            Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
         var controllers = new List<ControllerInfo>();
 
         // Open the real .csproj using MSBuild — this gives us full type resolution
