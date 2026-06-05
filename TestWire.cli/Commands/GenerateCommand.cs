@@ -1,6 +1,6 @@
 using System.CommandLine;
-using TestWire.cli.Analysis;
 using System.CommandLine.Invocation;
+using TestWire.cli.Analysis;
 using TestWire.cli.Generation;
 
 namespace TestWire.cli.Commands;
@@ -12,7 +12,7 @@ public class GenerateCommand : Command
         var projectOption = new Option<FileInfo>(
                 name: "--project",
                 description: "Path to the .csproj file to analyze")
-            { IsRequired = true };
+        { IsRequired = true };
 
         var frameworkOption = new Option<string>(
             name: "--framework",

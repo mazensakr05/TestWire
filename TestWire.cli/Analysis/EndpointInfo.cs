@@ -1,9 +1,10 @@
 namespace TestWire.cli.Analysis;
 
-public enum ReturnTypeKind {
-Unknown ,
-ActionResultOfT,
-IActionResultWithInferredT
+public enum ReturnTypeKind
+{
+    Unknown,
+    ActionResultOfT,
+    IActionResultWithInferredT
 
 }
 
@@ -22,6 +23,8 @@ public class EndpointInfo
 
     public List<ParameterDetail> Parameters { get; set; } = new();
 
+    public List<ProducesResponseDetail> ProducesResponses { get; set; } = new();
+
 
 }
 
@@ -35,4 +38,10 @@ public class ParameterDetail
 
     public List<PropertyDetail> DtoProperties { get; set; } = new();
 
+}
+
+public class ProducesResponseDetail
+{
+    public int StatusCode { get; set; }
+    public string? TypeName { get; set; }
 }

@@ -195,24 +195,25 @@ public class TestFileGenerator
     private static string GetDefaultValue(string type) => type.ToLower() switch
     {
         "int" or "int32" or "int64" or "long" => "1",
-        "string"                               => "\"test\"",
-        "bool" or "boolean"                    => "true",
-        "guid"                                 => "Guid.NewGuid()",
-        "datetime"                             => "DateTime.UtcNow",
-        "decimal"            => "1.0M",
-        "double" or "float"  => "1.0",
-        _                                      => "null"
+        "string" => "\"test\"",
+        "bool" or "boolean" => "true",
+        "guid" => "Guid.NewGuid()",
+        "datetime" => "DateTime.UtcNow",
+        "decimal" => "1.0M",
+        "double" or "float" => "1.0",
+        _ => "null"
     };
 
     private static string GetInvalidValue(string type) => type.ToLower() switch
     {
         "int" or "int32" or "int64" or "long" => "-1",
-        "string"                               => "null",
-        "bool" or "boolean"                    => "false",
-        "guid"                                 => "Guid.Empty",
-        "datetime"                             => "DateTime.MinValue",
-        "decimal"            => "-1.0M",
-        "double" or "float"  => "-1.0",        _                                      => "null"
+        "string" => "null",
+        "bool" or "boolean" => "false",
+        "guid" => "Guid.Empty",
+        "datetime" => "DateTime.MinValue",
+        "decimal" => "-1.0M",
+        "double" or "float" => "-1.0",
+        _ => "null"
     };
 
     private static string BuildObjectInitializer(string typeName, List<PropertyDetail> properties)

@@ -1,6 +1,6 @@
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
 
 
@@ -8,25 +8,25 @@ namespace TestWire.cli.Analysis;
 
 public class ProjectAnalyzer
 {
-   public static async Task<List<ControllerInfo>> AnalyzeAsync( string csprojPath)
+    public static async Task<List<ControllerInfo>> AnalyzeAsync(string csprojPath)
     {
-       var controllers = new List<ControllerInfo>();
+        var controllers = new List<ControllerInfo>();
 
         using var workspace = MSBuildWorkspace.Create();
         var project = await workspace.OpenProjectAsync(csprojPath);
         var compilation = await project.GetCompilationAsync();
 
-        if(compilation == null)
+        if (compilation == null)
             throw new Exception("Failed to compile project.");
 
-        foreach(var document in project.Documents)
+        foreach (var document in project.Documents)
         {
             // skip files in OBJ folder
-            if(document.FilePath.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") == true)
+            if (document.FilePath.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") == true)
                 continue;
 
             var syntexTree = await document.GetSyntaxTreeAsync();
-            if(syntexTree == null) continue;
+            if (syntexTree == null) continue;
             var root = await syntexTree.GetRootAsync();
             var semanticModel = compilation.GetSemanticModel(syntexTree);
 
@@ -65,6 +65,7 @@ public class ProjectAnalyzer
                         HasAuthorize = (HasAttribute(member, "Authorize") || HasAttribute(classSymbol, "Authorize"))
                          && !HasAttribute(member, "AllowAnonymous"),
                         ReturnType = UnwrapReturnType(member.ReturnType),
+                        ProducesResponses = GetProducesResponseDetails(member),
                         Parameters = new List<ParameterDetail>()
                     };
 
@@ -100,7 +101,7 @@ public class ProjectAnalyzer
 
     }
 
-   
+
 
     public static List<PropertyDetail> ReadDtoProperties(INamedTypeSymbol typeSymbol)
     {
@@ -121,7 +122,7 @@ public class ProjectAnalyzer
 
     }
 
-    
+
 
     private static List<ConstructorDependency> GetConstructorDependencies(INamedTypeSymbol classSymbol)
     {
@@ -131,29 +132,32 @@ public class ProjectAnalyzer
 
         var primary = constructors.OrderByDescending(c => c.Parameters.Length).First();
         var dependencies = new List<ConstructorDependency>();
-        foreach ( var parameter in primary.Parameters) {
-           
-            
-                dependencies.Add(new ConstructorDependency
-                {
-                    Name = parameter.Name,
-                    Type = parameter.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
-                });
-            
+        foreach (var parameter in primary.Parameters)
+        {
+
+
+            dependencies.Add(new ConstructorDependency
+            {
+                Name = parameter.Name,
+                Type = parameter.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
+            });
+
         }
         return dependencies;
     }
 
     private static string UnwrapReturnType(ITypeSymbol typeSymbol)
     {
-        string [] names  = ["Task", "ActionResult", "IActionResult"];
+        string[] names = ["Task", "ActionResult", "IActionResult"];
         // Cast attempt
         if (typeSymbol is not INamedTypeSymbol namedType)
             return typeSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
         // Check for Task<T>
-        if (names.Contains(namedType.Name)){
+        if (names.Contains(namedType.Name))
+        {
 
-            if (namedType.TypeArguments.Length > 0) {
+            if (namedType.TypeArguments.Length > 0)
+            {
 
                 return UnwrapReturnType(namedType.TypeArguments[0]);
 
@@ -173,32 +177,32 @@ public class ProjectAnalyzer
         foreach (var attr in symbol.GetAttributes())
         {
             var name = attr.AttributeClass?.Name;
-            if (name == null ) continue;
+            if (name == null) continue;
             var cleanName = name.EndsWith("Attribute") ? name.Substring(0, name.Length - 9) : name;
-      
+
             if (cleanName == attributeName)
                 return true;
         }
         return false;
     }
 
-    private static string? GetAttributeArgument(ISymbol symbol , string attributeName)
+    private static string? GetAttributeArgument(ISymbol symbol, string attributeName)
     {
         foreach (var attr in symbol.GetAttributes())
         {
             var name = attr.AttributeClass?.Name;
-            if (name == null ) continue;
+            if (name == null) continue;
             var cleanName = name.EndsWith("Attribute") ? name.Substring(0, name.Length - 9) : name;
-            if(cleanName == attributeName && attr.ConstructorArguments.Length > 0)
+            if (cleanName == attributeName && attr.ConstructorArguments.Length > 0)
                 return attr.ConstructorArguments[0].Value?.ToString();
 
         }
         return null;
     }
 
-    private static string? GetHttpVerb (IMethodSymbol methodSymbol)
+    private static string? GetHttpVerb(IMethodSymbol methodSymbol)
     {
-        string [] verbs = ["HttpGet", "HttpPost", "HttpPut", "HttpDelete", "HttpPatch"];
+        string[] verbs = ["HttpGet", "HttpPost", "HttpPut", "HttpDelete", "HttpPatch"];
         foreach (var verb in verbs)
         {
             if (HasAttribute(methodSymbol, verb))
@@ -225,6 +229,48 @@ public class ProjectAnalyzer
         return typeSymbol.TypeKind == TypeKind.Class ||
                typeSymbol.TypeKind == TypeKind.Struct;
 
+    }
+
+    private static List<ProducesResponseDetail> GetProducesResponseDetails(IMethodSymbol methodSymbol)
+    {
+        var result = new List<ProducesResponseDetail>();
+
+        foreach (var attr in methodSymbol.GetAttributes())
+        {
+
+            var name = attr.AttributeClass?.Name;
+            if (name == null) continue;
+
+            var cleanName = name.EndsWith("Attribute") ? name.Substring(0, name.Length - 9) : name;
+
+            if (cleanName != "ProducesResponseType") continue;
+
+
+            if (attr.ConstructorArguments.Length == 0) continue;
+
+            var detail = new ProducesResponseDetail();
+
+            // Case 1: [ProducesResponseType(typeof(T), statusCode)]
+            if (attr.ConstructorArguments[0].Kind == TypedConstantKind.Type)
+            {
+                var typeSymbol = attr.ConstructorArguments[0].Value as ITypeSymbol;
+                detail.TypeName = typeSymbol?
+                    .ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+
+                // status code is the second argument
+                if (attr.ConstructorArguments.Length > 1)
+                    detail.StatusCode = (int)(attr.ConstructorArguments[1].Value ?? 200);
+            }
+            // Case 2: [ProducesResponseType(statusCode)]
+            else if (attr.ConstructorArguments[0].Kind == TypedConstantKind.Primitive)
+            {
+                detail.StatusCode = (int)(attr.ConstructorArguments[0].Value ?? 200);
+                detail.TypeName = null; // no type declared
+            }
+
+            result.Add(detail);
+        }
+        return result;
     }
 
 
