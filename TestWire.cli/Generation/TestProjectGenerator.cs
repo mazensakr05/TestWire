@@ -8,8 +8,8 @@ public class TestProjectGenerator
         var projectName = Path.GetFileNameWithoutExtension(targetCsprojPath);
         var testCsprojPath = Path.Combine(outputDir, $"{projectName}.Tests.csproj");
 
-        if (File.Exists(testCsprojPath)) return; 
-        
+        if (File.Exists(testCsprojPath)) return;
+
         var targetFramework = DetectTargetFramework(targetCsprojPath);
         var relativePath = Path.GetRelativePath(outputDir, targetCsprojPath);
 
@@ -45,10 +45,10 @@ public class TestProjectGenerator
     {
         try
         {
-        var doc = XDocument.Load(csprojPath);
-        var tf = doc.Descendants("TargetFramework").FirstOrDefault()?.Value;
-        
-        if (!string.IsNullOrWhiteSpace(tf)) return tf;
+            var doc = XDocument.Load(csprojPath);
+            var tf = doc.Descendants("TargetFramework").FirstOrDefault()?.Value;
+
+            if (!string.IsNullOrWhiteSpace(tf)) return tf;
         }
         catch { }
 
