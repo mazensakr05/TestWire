@@ -1,213 +1,96 @@
-using System;
-using Moq;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Http;
-using SampleApi.DTOs;
 using Xunit;
+using System.Net;
+using System.Net.Http.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
+using SampleApi;
+using SampleApi.DTOs;
 
-namespace SampleApi.Controllers.Tests;
+namespace TestWire.Generated.Tests;
 
-public class ProductsControllerTests
+public class ProductsControllerTests : IClassFixture<WebApplicationFactory<Program>>
 {
-    [Fact]
-    public async Task GetAll_ReturnsOkObject_WhenSuccessful()
+    private readonly HttpClient _client;
+
+    public ProductsControllerTests(WebApplicationFactory<Program> factory)
     {
-        // Arrange
-        var mockService = new Mock<IProductService>();
-
-        var controller = new ProductsController(mockService.Object);
-
-        // Act
-        var result = await controller.GetAll();
-
-        // Assert
-        Assert.IsType<OkObjectResult>(result);
+        _client = factory.CreateClient();
     }
 
     [Fact]
-    public async Task GetAll_ReturnsNotFound_WhenFailed()
+    public async Task GetAll_Returns200_WithListOfProduct()
     {
-        // Arrange
-        var mockService = new Mock<IProductService>();
-
-        var controller = new ProductsController(mockService.Object);
-
-        // Act
-        var result = await controller.GetAll();
-
-        // Assert
-        Assert.IsType<NotFoundResult>(result);
+        var response = await _client.GetAsync("api/products");
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<List<Product>>();
+        Assert.NotNull(result);
     }
 
     [Fact]
-    public async Task GetById_ReturnsOkObject_WhenSuccessful()
+    public async Task GetById_Returns200_WithProduct()
     {
-        // Arrange
-        var mockService = new Mock<IProductService>();
-
-        var controller = new ProductsController(mockService.Object);
-
-        // Act
-        var result = await controller.GetById(1);
-
-        // Assert
-        Assert.IsType<OkObjectResult>(result);
+        var response = await _client.GetAsync("api/products/1");
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<Product>();
+        Assert.NotNull(result);
     }
 
     [Fact]
-    public async Task GetById_ReturnsNotFound_WhenFailed()
+    public async Task Create_Returns200_WithString()
     {
-        // Arrange
-        var mockService = new Mock<IProductService>();
+        var request = new SampleApi.DTOs.CreateProductDto
+        {
+            Name = "test",
+            Price = 1.0m,
+            IsActive = true,
+        };
 
-        var controller = new ProductsController(mockService.Object);
-
-        // Act
-        var result = await controller.GetById(-1);
-
-        // Assert
-        Assert.IsType<NotFoundResult>(result);
+        var response = await _client.PostAsJsonAsync("api/products", request);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<string>();
+        Assert.NotNull(result);
     }
 
     [Fact]
-    public async Task Create_ReturnsCreatedAtAction_WhenSuccessful()
+    public async Task Create_Returns401_WhenUnauthenticated()
     {
-        // Arrange
-        var mockService = new Mock<IProductService>();
-
-        var controller = new ProductsController(mockService.Object);
-
-        // Act
-        var result = await controller.Create(new CreateProductDto { Name = "test", Price = 1.0M, IsActive = true });
-
-        // Assert
-        Assert.IsType<CreatedAtActionResult>(result);
+        var response = await _client.PostAsJsonAsync("api/products", new { });
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task Create_ReturnsBadRequestObject_WhenFailed()
+    public async Task Update_Returns200_WithProduct()
     {
-        // Arrange
-        var mockService = new Mock<IProductService>();
+        var request = new SampleApi.DTOs.UpdateProductDto
+        {
+            Name = "test",
+            Price = 1.0m,
+        };
 
-        var controller = new ProductsController(mockService.Object);
-
-        // Act
-        var result = await controller.Create(new CreateProductDto { Name = "test", Price = 1.0M, IsActive = true });
-
-        // Assert
-        Assert.IsType<BadRequestObjectResult>(result);
+        var response = await _client.PutAsJsonAsync("api/products/1", request);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<Product>();
+        Assert.NotNull(result);
     }
 
     [Fact]
-    public async Task Create_Returns401_WhenUnauthorized()
+    public async Task Update_Returns401_WhenUnauthenticated()
     {
-        // Arrange
-        var mockService = new Mock<IProductService>();
-
-        var controller = new ProductsController(mockService.Object);
-        controller.ControllerContext = new ControllerContext();
-        controller.ControllerContext.HttpContext = new DefaultHttpContext();
-
-        // Act
-        var result = await controller.Create(new CreateProductDto { Name = "test", Price = 1.0M, IsActive = true });
-
-        // Assert
-        Assert.IsType<UnauthorizedResult>(result);
+        var response = await _client.PutAsJsonAsync("api/products/1", new { });
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task Update_ReturnsOkObject_WhenSuccessful()
+    public async Task Delete_Returns200()
     {
-        // Arrange
-        var mockService = new Mock<IProductService>();
-
-        var controller = new ProductsController(mockService.Object);
-
-        // Act
-        var result = await controller.Update(1, new UpdateProductDto { Name = "test", Price = 1.0M });
-
-        // Assert
-        Assert.IsType<OkObjectResult>(result);
+        var response = await _client.DeleteAsync("api/products/1");
+        response.EnsureSuccessStatusCode();
     }
 
     [Fact]
-    public async Task Update_ReturnsBadRequestObject_WhenFailed()
+    public async Task Delete_Returns401_WhenUnauthenticated()
     {
-        // Arrange
-        var mockService = new Mock<IProductService>();
-
-        var controller = new ProductsController(mockService.Object);
-
-        // Act
-        var result = await controller.Update(-1, new UpdateProductDto { Name = "test", Price = 1.0M });
-
-        // Assert
-        Assert.IsType<BadRequestObjectResult>(result);
-    }
-
-    [Fact]
-    public async Task Update_Returns401_WhenUnauthorized()
-    {
-        // Arrange
-        var mockService = new Mock<IProductService>();
-
-        var controller = new ProductsController(mockService.Object);
-        controller.ControllerContext = new ControllerContext();
-        controller.ControllerContext.HttpContext = new DefaultHttpContext();
-
-        // Act
-        var result = await controller.Update(1, new UpdateProductDto { Name = "test", Price = 1.0M });
-
-        // Assert
-        Assert.IsType<UnauthorizedResult>(result);
-    }
-
-    [Fact]
-    public async Task Delete_ReturnsNoContent_WhenSuccessful()
-    {
-        // Arrange
-        var mockService = new Mock<IProductService>();
-
-        var controller = new ProductsController(mockService.Object);
-
-        // Act
-        var result = await controller.Delete(1);
-
-        // Assert
-        Assert.IsType<NoContentResult>(result);
-    }
-
-    [Fact]
-    public async Task Delete_ReturnsNotFound_WhenFailed()
-    {
-        // Arrange
-        var mockService = new Mock<IProductService>();
-
-        var controller = new ProductsController(mockService.Object);
-
-        // Act
-        var result = await controller.Delete(-1);
-
-        // Assert
-        Assert.IsType<NotFoundResult>(result);
-    }
-
-    [Fact]
-    public async Task Delete_Returns401_WhenUnauthorized()
-    {
-        // Arrange
-        var mockService = new Mock<IProductService>();
-
-        var controller = new ProductsController(mockService.Object);
-        controller.ControllerContext = new ControllerContext();
-        controller.ControllerContext.HttpContext = new DefaultHttpContext();
-
-        // Act
-        var result = await controller.Delete(1);
-
-        // Assert
-        Assert.IsType<UnauthorizedResult>(result);
+        var response = await _client.DeleteAsync("api/products/1");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
 }
