@@ -1,5 +1,8 @@
 using SampleApi.Models;
 using SampleApi.DTOs;
+
+namespace SampleApi.Services;
+
 public interface IProductService
 {
     Task<List<Product>> GetAllAsync();
@@ -7,4 +10,5 @@ public interface IProductService
     Task<Product> CreateAsync(CreateProductDto dto);
     Task<Product?> UpdateAsync(int id, UpdateProductDto dto);
     Task<bool> DeleteAsync(int id);
+    Task<ProductDetailsDto?> GetDetailsAsync(int id);
 }

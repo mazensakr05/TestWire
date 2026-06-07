@@ -3,227 +3,135 @@ using TestWire.cli.Analysis;
 
 namespace TestWire.cli.Generation;
 
-public class TestFileGenerator
+public static class TestFileGenerator
 {
-    public static string Generate(ControllerInfo controller, string framework)
+    public static string Generate(ControllerInfo controller, string framework = "xunit")
+    {
+        var isNUnit = framework.Equals("nunit", StringComparison.OrdinalIgnoreCase);
+        var sb = new StringBuilder();
+
+        // Usings
+        sb.AppendLine(isNUnit ? "using NUnit.Framework;" : "using Xunit;");
+        sb.AppendLine("using System.Net;");
+        sb.AppendLine("using System.Net.Http.Json;");
+        sb.AppendLine("using Microsoft.AspNetCore.Mvc.Testing;");
+        var projectNamespace = controller.Namespace.Replace(".Controllers", "");
+        sb.AppendLine($"using {projectNamespace};");
+        sb.AppendLine($"using {projectNamespace}.DTOs;");
+        sb.AppendLine($"using {projectNamespace}.Models;");
+        sb.AppendLine();
+
+        // Namespace
+        sb.AppendLine("namespace TestWire.Generated.Tests;");
+        sb.AppendLine();
+
+        // Class declaration
+        if (isNUnit)
+        {
+            sb.AppendLine("[TestFixture]");
+            sb.AppendLine($"public class {controller.ClassName}Tests");
+        }
+        else
+        {
+            sb.AppendLine($"public class {controller.ClassName}Tests : IClassFixture<WebApplicationFactory<Program>>");
+        }
+        
+        sb.AppendLine("{");
+
+        // Fields and constructor
+        sb.AppendLine("    private readonly HttpClient _client;");
+        sb.AppendLine();
+
+        if (isNUnit)
+        {
+            sb.AppendLine("    private WebApplicationFactory<Program> _factory;");
+            sb.AppendLine();
+            sb.AppendLine("    [SetUp]");
+            sb.AppendLine("    public void SetUp()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        _factory = new WebApplicationFactory<Program>();");
+            sb.AppendLine("        _client = _factory.CreateClient();");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+            sb.AppendLine("    [TearDown]");
+            sb.AppendLine("    public void TearDown()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        _client.Dispose();");
+            sb.AppendLine("        _factory.Dispose();");
+            sb.AppendLine("    }");
+        }
+        else
+        {
+            sb.AppendLine($"    public {controller.ClassName}Tests(WebApplicationFactory<Program> factory)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        _client = factory.CreateClient();");
+            sb.AppendLine("    }");
+        }
+        sb.AppendLine();
+
+        // Generate one test method per endpoint
+        foreach (var endpoint in controller.Endpoints)
+        {
+            // Step 1: build the real URL for this endpoint
+            var url = RouteBuilder.Build(
+                controller.BaseRoute,
+                controller.ClassName,
+                endpoint.Route,
+                endpoint.Parameters);
+
+            // Step 2: build the happy path test method
+            var testBody = MethodBodyBuilder.Build(endpoint, url);
+            if (isNUnit)
+            {
+                testBody = testBody.Replace("[Fact]", "[Test]")
+                                 .Replace("Assert.Equal(", "Assert.That(")
+                                 .Replace("Assert.NotNull(", "Assert.That(")
+                                 .Replace("Assert.Null(", "Assert.That(");
+                                 // Simple replacement for NUnit Assert.That syntax might be complex, 
+                                 // let's stick to simple ones or use NUnit Classic Assert if available
+            }
+            sb.Append(testBody);
+
+            // Step 3: if endpoint requires auth, generate a 401 test too
+            if (endpoint.HasAuthorize)
+                sb.Append(BuildUnauthorizedTest(endpoint, url, isNUnit));
+
+        }
+        // Close class
+        sb.AppendLine("}");
+
+        return sb.ToString();
+    }
+    
+    private static string BuildUnauthorizedTest(EndpointInfo endpoint, string url, bool isNUnit)
     {
         var sb = new StringBuilder();
 
-        // usings
-        sb.AppendLine("using System;");
-        sb.AppendLine("using Moq;");
-        sb.AppendLine("using Microsoft.AspNetCore.Mvc;");
-        sb.AppendLine("using Microsoft.AspNetCore.Http;");
-        var projectNamespace = controller.Namespace.Replace(".Controllers", "");
-        sb.AppendLine($"using {projectNamespace}.DTOs;");
-        sb.AppendLine(framework == "nunit" ? "using NUnit.Framework;" : "using Xunit;");
-        sb.AppendLine();
-
-        // namespace
-        sb.AppendLine($"namespace {controller.Namespace}.Tests;");
-        sb.AppendLine();
-
-        // class
-        sb.AppendLine($"public class {controller.ClassName}Tests");
-        sb.AppendLine("{");
-
-        // one test per endpoint
-        foreach (var endpoint in controller.Endpoints)
+        var verb = endpoint.HttpVerb switch
         {
-            var testAttr = framework == "nunit" ? "[Test]" : "[Fact]";
+            "HttpGet" => $"await _client.GetAsync(\"{url}\");",
+            "HttpDelete" => $"await _client.DeleteAsync(\"{url}\");",
+            "HttpPost" => $"await _client.PostAsJsonAsync(\"{url}\", new {{ }});",
+            "HttpPut" => $"await _client.PutAsJsonAsync(\"{url}\", new {{ }});",
+            "HttpPatch" => $"await _client.PatchAsJsonAsync(\"{url}\", new {{ }});",
+            _ => $"await _client.GetAsync(\"{url}\");"
+        };
 
-            WriteHappyPath(sb, endpoint, controller, testAttr);
-            WriteBadPath(sb, endpoint, controller, testAttr);
-
-            if (endpoint.HasAuthorize)
-                WriteSecurityTest(sb, endpoint, controller, testAttr);
+        sb.AppendLine(isNUnit ? "    [Test]" : "    [Fact]");
+        sb.AppendLine($"    public async Task {endpoint.MethodName}_Returns401_WhenUnauthenticated()");
+        sb.AppendLine("    {");
+        sb.AppendLine($"        var response = {verb}");
+        if (isNUnit)
+        {
+            sb.AppendLine($"        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));");
         }
+        else
+        {
+            sb.AppendLine($"        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);");
+        }
+        sb.AppendLine("    }");
+        sb.AppendLine();
 
-        sb.AppendLine("}");
         return sb.ToString();
-    }
-
-    private static bool IsLoggerDependency(string typeName)
-    {
-        // Strip generic arguments first so dots inside ILogger<TCategoryName> do not affect
-        // extraction of the outer type name from fully-qualified names.
-        var outerType = typeName;
-        var genericStart = outerType.IndexOf('<');
-        if (genericStart >= 0)
-        {
-            outerType = outerType.Substring(0, genericStart);
-        }
-
-        var lastDot = outerType.LastIndexOf('.');
-        var lastAliasSeparator = outerType.LastIndexOf("::");
-        var separatorIndex = Math.Max(lastDot, lastAliasSeparator);
-        var lastSegment = separatorIndex >= 0
-            ? outerType.Substring(separatorIndex + (separatorIndex == lastAliasSeparator ? 2 : 1))
-            : outerType;
-
-        // Match ILogger and ILogger<T> but NOT ILoggerFactory or ILoggerProvider
-        return lastSegment == "ILogger";
-    }
-
-    private static void WriteControllerSetup(StringBuilder sb, ControllerInfo controller)
-    {
-        if (controller.Dependencies.Count == 0)
-        {
-            sb.AppendLine($"        var controller = new {controller.ClassName}();");
-            return;
-        }
-
-        // Generate mock variables — skip ILogger (infrastructure noise, not worth asserting)
-        foreach (var dep in controller.Dependencies)
-        {
-            if (IsLoggerDependency(dep.Type))
-            {
-                sb.AppendLine($"        // ILogger suppressed by TestWire");
-                continue;
-            }
-
-            var mockName = $"mock{char.ToUpper(dep.Name[0])}{dep.Name.Substring(1)}";
-            sb.AppendLine($"        var {mockName} = new Mock<{dep.Type}>();");
-        }
-
-        sb.AppendLine();
-
-        // Build constructor args — ILogger gets Mock.Of<T>() inline instead of a named variable
-        var args = string.Join(", ", controller.Dependencies.Select(dep =>
-            IsLoggerDependency(dep.Type)
-                ? $"Mock.Of<{dep.Type}>()"
-                : $"mock{char.ToUpper(dep.Name[0])}{dep.Name.Substring(1)}.Object"));
-
-        sb.AppendLine($"        var controller = new {controller.ClassName}({args});");
-    }
-
-    private static void WriteHappyPath(StringBuilder sb, EndpointInfo endpoint, ControllerInfo controller, string testAttr)
-    {
-        var expectedResult = endpoint.HttpVerb switch
-        {
-            "HttpGet" => "OkObjectResult",
-            "HttpPost" => "CreatedAtActionResult",
-            "HttpPut" => "OkObjectResult",
-            "HttpDelete" => "NoContentResult",
-            _ => "OkObjectResult"
-        };
-
-        var testName = $"{endpoint.MethodName}_Returns{expectedResult.Replace("Result", "")}_WhenSuccessful";
-        var asyncKeyword = endpoint.IsAsync ? "async Task" : "void";
-        var awaitKeyword = endpoint.IsAsync ? "await " : "";
-        var paramValues = string.Join(", ", endpoint.Parameters.Select(p =>
-            p.DtoProperties.Count > 0
-                ? BuildObjectInitializer(p.FullyQualifiedType, p.DtoProperties)
-                : GetDefaultValue(p.Type)));
-
-        sb.AppendLine($"    {testAttr}");
-        sb.AppendLine($"    public {asyncKeyword} {testName}()");
-        sb.AppendLine("    {");
-        sb.AppendLine($"        // Arrange");
-        WriteControllerSetup(sb, controller);
-        sb.AppendLine();
-        sb.AppendLine($"        // Act");
-        sb.AppendLine($"        var result = {awaitKeyword}controller.{endpoint.MethodName}({paramValues});");
-        sb.AppendLine();
-        sb.AppendLine($"        // Assert");
-        sb.AppendLine($"        Assert.IsType<{expectedResult}>(result);");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-    }
-
-    private static void WriteBadPath(StringBuilder sb, EndpointInfo endpoint, ControllerInfo controller, string testAttr)
-    {
-        var expectedResult = endpoint.HttpVerb switch
-        {
-            "HttpGet" => "NotFoundResult",
-            "HttpPost" => "BadRequestObjectResult",
-            "HttpPut" => "BadRequestObjectResult",
-            "HttpDelete" => "NotFoundResult",
-            _ => "BadRequestObjectResult"
-        };
-
-        var testName = $"{endpoint.MethodName}_Returns{expectedResult.Replace("Result", "")}_WhenFailed";
-        var asyncKeyword = endpoint.IsAsync ? "async Task" : "void";
-        var awaitKeyword = endpoint.IsAsync ? "await " : "";
-        var paramValues = string.Join(", ", endpoint.Parameters.Select(p =>
-            p.DtoProperties.Count > 0
-                ? BuildObjectInitializer(p.FullyQualifiedType, p.DtoProperties)
-                : GetInvalidValue(p.Type)));
-
-        sb.AppendLine($"    {testAttr}");
-        sb.AppendLine($"    public {asyncKeyword} {testName}()");
-        sb.AppendLine("    {");
-        sb.AppendLine($"        // Arrange");
-        WriteControllerSetup(sb, controller);
-        sb.AppendLine();
-        sb.AppendLine($"        // Act");
-        sb.AppendLine($"        var result = {awaitKeyword}controller.{endpoint.MethodName}({paramValues});");
-        sb.AppendLine();
-        sb.AppendLine($"        // Assert");
-        sb.AppendLine($"        Assert.IsType<{expectedResult}>(result);");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-    }
-
-    private static void WriteSecurityTest(StringBuilder sb, EndpointInfo endpoint, ControllerInfo controller, string testAttr)
-    {
-        var testName = $"{endpoint.MethodName}_Returns401_WhenUnauthorized";
-        var asyncKeyword = endpoint.IsAsync ? "async Task" : "void";
-        var awaitKeyword = endpoint.IsAsync ? "await " : "";
-        var paramValues = string.Join(", ", endpoint.Parameters.Select(p =>
-            p.DtoProperties.Count > 0
-                ? BuildObjectInitializer(p.FullyQualifiedType, p.DtoProperties)
-                : GetDefaultValue(p.Type)));
-
-        sb.AppendLine($"    {testAttr}");
-        sb.AppendLine($"    public {asyncKeyword} {testName}()");
-        sb.AppendLine("    {");
-        sb.AppendLine($"        // Arrange");
-        WriteControllerSetup(sb, controller);
-        sb.AppendLine($"        controller.ControllerContext = new ControllerContext();");
-        sb.AppendLine($"        controller.ControllerContext.HttpContext = new DefaultHttpContext();");
-        sb.AppendLine();
-        sb.AppendLine($"        // Act");
-        sb.AppendLine($"        var result = {awaitKeyword}controller.{endpoint.MethodName}({paramValues});");
-        sb.AppendLine();
-        sb.AppendLine($"        // Assert");
-        sb.AppendLine($"        Assert.IsType<UnauthorizedResult>(result);");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-    }
-
-    private static string GetDefaultValue(string type) => type.ToLower() switch
-    {
-        "int" or "int32" or "int64" or "long" => "1",
-        "string" => "\"test\"",
-        "bool" or "boolean" => "true",
-        "guid" => "Guid.NewGuid()",
-        "datetime" => "DateTime.UtcNow",
-        "decimal" => "1.0M",
-        "double" or "float" => "1.0",
-        _ => "null"
-    };
-
-    private static string GetInvalidValue(string type) => type.ToLower() switch
-    {
-        "int" or "int32" or "int64" or "long" => "-1",
-        "string" => "null",
-        "bool" or "boolean" => "false",
-        "guid" => "Guid.Empty",
-        "datetime" => "DateTime.MinValue",
-        "decimal" => "-1.0M",
-        "double" or "float" => "-1.0",
-        _ => "null"
-    };
-
-    private static string BuildObjectInitializer(string typeName, List<PropertyDetail> properties)
-    {
-        if (properties.Count == 0)
-            return $"new {typeName}()";
-
-        var props = string.Join(", ", properties.Select(p =>
-            $"{p.Name} = {GetDefaultValue(p.Type)}"));
-
-        return $"new {typeName} {{ {props} }}";
     }
 }

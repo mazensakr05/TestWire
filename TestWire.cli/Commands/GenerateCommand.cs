@@ -18,10 +18,9 @@ public class GenerateCommand : Command
             name: "--framework",
             description: "Test framework to use: xunit or nunit",
             getDefaultValue: () => "xunit");
-
-        var outputOption = new Option<DirectoryInfo?>(
-            name: "--output",
-            description: "Directory to write generated test files");
+        var outputOption = new Option<string?>(
+    name: "--output",
+    description: "File or directory path for generated test files");
 
         var dryRunOption = new Option<bool>(
             name: "--dry-run",
@@ -72,8 +71,15 @@ public class GenerateCommand : Command
             else
             {
                 var projectName = Path.GetFileNameWithoutExtension(project.FullName);
-                var outputDir = output?.FullName ?? Path.GetFullPath(Path.Combine(project.DirectoryName!, "..", $"{projectName}.Tests"));
-                TestProjectGenerator.Generate(project.FullName, outputDir);
+                var rawOutput = context.ParseResult.GetValueForOption(outputOption);
+
+                var outputDir = rawOutput != null
+                    ? (Directory.Exists(rawOutput) || !Path.HasExtension(rawOutput)
+                        ? Path.GetFullPath(rawOutput)
+                        : Path.GetDirectoryName(Path.GetFullPath(rawOutput))!)
+                    : Path.GetFullPath(Path.Combine(project.DirectoryName!, "..", $"{projectName}.Tests"));
+
+                TestProjectGenerator.Generate(project.FullName, outputDir, framework);
 
                 foreach (var controller in controllers)
                 {

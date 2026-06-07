@@ -16,7 +16,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>testwire</ToolCommandName>
     <PackageId>testwire</PackageId>
-    <Version>0.1.2</Version>
+    <Version>0.2.0</Version>
     <Authors>Mazen Hassan</Authors>
     <Description>Generates xUnit/NUnit test stubs for ASP.NET Core controllers using Roslyn. Reads your actual controller structure and produces compilable test files with mocked dependencies.</Description>
     <PackageProjectUrl>https://github.com/mazensakr05/TestWire</PackageProjectUrl>
@@ -33,10 +33,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Build.Locator" Version="1.11.2" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.12.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="4.12.0" />
+    <PackageReference Include="Microsoft.Build.Locator" Version="1.6.10" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="4.8.0" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
   </ItemGroup>
 
