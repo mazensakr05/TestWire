@@ -16,7 +16,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>testwire</ToolCommandName>
     <PackageId>testwire</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <Authors>Mazen Hassan</Authors>
     <Description>Generates xUnit/NUnit test stubs for ASP.NET Core controllers using Roslyn. Reads your actual controller structure and produces compilable test files with mocked dependencies.</Description>
     <PackageProjectUrl>https://github.com/mazensakr05/TestWire</PackageProjectUrl>

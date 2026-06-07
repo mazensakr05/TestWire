@@ -2,6 +2,11 @@
 
 All notable changes to TestWire are documented here.
 
+## [0.2.1] - 2026-06-07
+
+### Fixed
+- **Namespace Generation**: Fixed a bug in namespace extraction that could produce invalid `using` statements. Generated tests now follow the `{ProjectNamespace}.Tests` convention.
+
 ## [0.2.0] - 2026-06-07
 
 ### Added

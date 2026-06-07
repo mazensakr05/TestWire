@@ -10,19 +10,31 @@ public static class TestFileGenerator
         var isNUnit = framework.Equals("nunit", StringComparison.OrdinalIgnoreCase);
         var sb = new StringBuilder();
 
+        // Extract base namespace (e.g., "MyApp.Controllers.Admin" -> "MyApp")
+        var controllersIndex = controller.Namespace.LastIndexOf(".Controllers", StringComparison.OrdinalIgnoreCase);
+        var projectNamespace = controllersIndex != -1 
+            ? controller.Namespace.Substring(0, controllersIndex) 
+            : controller.Namespace;
+
         // Usings
         sb.AppendLine(isNUnit ? "using NUnit.Framework;" : "using Xunit;");
         sb.AppendLine("using System.Net;");
         sb.AppendLine("using System.Net.Http.Json;");
         sb.AppendLine("using Microsoft.AspNetCore.Mvc.Testing;");
-        var projectNamespace = controller.Namespace.Replace(".Controllers", "");
-        sb.AppendLine($"using {projectNamespace};");
-        sb.AppendLine($"using {projectNamespace}.DTOs;");
-        sb.AppendLine($"using {projectNamespace}.Models;");
+        
+        if (!string.IsNullOrEmpty(projectNamespace))
+        {
+            sb.AppendLine($"using {projectNamespace};");
+            sb.AppendLine($"using {projectNamespace}.DTOs;");
+            sb.AppendLine($"using {projectNamespace}.Models;");
+        }
         sb.AppendLine();
 
         // Namespace
-        sb.AppendLine("namespace TestWire.Generated.Tests;");
+        var testNamespace = string.IsNullOrEmpty(projectNamespace) 
+            ? "TestWire.Generated.Tests" 
+            : $"{projectNamespace}.Tests";
+        sb.AppendLine($"namespace {testNamespace};");
         sb.AppendLine();
 
         // Class declaration
