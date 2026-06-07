@@ -1,6 +1,8 @@
 using SampleApi.Models;
 using SampleApi.DTOs;
 
+namespace SampleApi.Services;
+
 public class ProductService : IProductService
 {
     private readonly List<Product> _products = new();
@@ -38,5 +40,21 @@ public class ProductService : IProductService
         if (product == null) return Task.FromResult(false);
         _products.Remove(product);
         return Task.FromResult(true);
+    }
+
+    public Task<ProductDetailsDto?> GetDetailsAsync(int id)
+    {
+        var product = _products.FirstOrDefault(p => p.Id == id);
+        if (product == null) return Task.FromResult<ProductDetailsDto?>(null);
+
+        return Task.FromResult<ProductDetailsDto?>(new ProductDetailsDto
+        {
+            Id = product.Id,
+            Name = product.Name,
+            Price = product.Price,
+            Category = new CategoryDto { Id = 1, Name = "General" },
+            Tags = new List<string> { "Electronics", "Sample" },
+            Inventory = new InventoryDto { StockCount = 10, WarehouseLocation = "Main" }
+        });
     }
 }

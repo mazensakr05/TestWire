@@ -58,7 +58,8 @@ public class GenerateCommand : Command
             {
                 foreach (var controller in controllers)
                 {
-                    var content = TestFileGenerator.Generate(controller); Console.WriteLine("\n--- Generated Test File ---");
+                    var content = TestFileGenerator.Generate(controller, framework);
+                    Console.WriteLine("\n--- Generated Test File ---");
                     Console.WriteLine(content);
 
                     foreach (var endpoint in controller.Endpoints)
@@ -76,11 +77,14 @@ public class GenerateCommand : Command
                     ? (Path.HasExtension(rawOutput)
                         ? Path.GetDirectoryName(Path.GetFullPath(rawOutput))!
                         : Path.GetFullPath(rawOutput))
-                    : Path.GetFullPath(Path.Combine(project.DirectoryName!, "..", $"{projectName}.Tests")); TestProjectGenerator.Generate(project.FullName, outputDir);
+                    : Path.GetFullPath(Path.Combine(project.DirectoryName!, "..", $"{projectName}.Tests"));
+
+                TestProjectGenerator.Generate(project.FullName, outputDir, framework);
 
                 foreach (var controller in controllers)
                 {
-                    var content = TestFileGenerator.Generate(controller); var fileName = $"{controller.ClassName}Tests.cs";
+                    var content = TestFileGenerator.Generate(controller, framework);
+                    var fileName = $"{controller.ClassName}Tests.cs";
                     var filePath = Path.Combine(outputDir, fileName);
 
                     TestFileWriter.Write(filePath, content);

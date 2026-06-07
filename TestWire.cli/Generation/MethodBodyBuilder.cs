@@ -1,5 +1,5 @@
-﻿using System.Runtime.Intrinsics.X86;
-using System.Text;
+﻿using System.Text;
+using System.Text.RegularExpressions;
 using TestWire.cli.Analysis;
 
 namespace TestWire.cli.Generation;
@@ -67,11 +67,15 @@ public static class MethodBodyBuilder
 
     private static string BuildTestName(EndpointInfo endpoint)
     {
-        var returnPart = string.IsNullOrEmpty(endpoint.ReturnType)
-            ? ""
-            : $"_With{CapitalizeFirst(endpoint.ReturnType.Replace("<", "Of").Replace(">", ""))}";
+        if (string.IsNullOrEmpty(endpoint.ReturnType))
+        {
+            return $"{endpoint.MethodName}_Returns200";
+        }
 
-        return $"{endpoint.MethodName}_Returns200{returnPart}";
+        var sanitizedType = Regex.Replace(endpoint.ReturnType, @"[^a-zA-Z0-9]", "_");
+        sanitizedType = Regex.Replace(sanitizedType, @"_+", "_").Trim('_');
+
+        return $"{endpoint.MethodName}_Returns200_With{CapitalizeFirst(sanitizedType)}";
     }
 
     private static string CapitalizeFirst(string s) =>
