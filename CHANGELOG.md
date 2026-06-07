@@ -9,6 +9,7 @@ All notable changes to TestWire are documented here.
 - **Integration Testing**: Generated tests now use `WebApplicationFactory<Program>` by default for end-to-end integration testing.
 - **Project File Generation**: The tool now automatically generates a `.csproj` for the test project with all required package references (xUnit/NUnit, Mvc.Testing, etc.).
 - **Complex Type Support**: Improved analysis and generation for nested DTOs, collections, and complex generic return types.
+- **Query & Header Support**: `[FromQuery]` and `[FromHeader]` parameters are now analyzed and integrated into generated test routes and requests.
 - **Enhanced Sample API**: A more comprehensive sample API with multiple controllers and complex data structures for demonstration.
 
 ### Fixed

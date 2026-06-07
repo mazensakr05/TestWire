@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using TestWire.cli.Analysis;
 
 namespace TestWire.cli.Generation
@@ -12,10 +13,30 @@ namespace TestWire.cli.Generation
             var controllerName = ResolveControllerName(className);
             var resolvedBase = baseRoute.Replace("[controller]", controllerName, StringComparison.OrdinalIgnoreCase);
             var combined = CombineSegments(resolvedBase, routeSegment);
-            return ReplaceRouteTokens(combined, parameters);
+            var routeWithTokens = ReplaceRouteTokens(combined, parameters);
+
+            return AppendQueryParameters(routeWithTokens, parameters);
         }
-        private static string ResolveControllerName(string className)
+
+        private static string AppendQueryParameters(string route, List<ParameterDetail> parameters)
         {
+            var queryParams = parameters.Where(p => p.IsFromQuery).ToList();
+            if (!queryParams.Any()) return route;
+
+            var sb = new StringBuilder(route);
+            sb.Append("?");
+            for (int i = 0; i < queryParams.Count; i++)
+            {
+                var p = queryParams[i];
+                sb.Append($"{p.Name}={GetTestValueForType(p.Type)}");
+                if (i < queryParams.Count - 1) sb.Append("&");
+            }
+
+            return sb.ToString();
+        }
+
+        private static string ResolveControllerName(string className)
+        ...
             const string suffix = "Controller";
             var name = className.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) ? className[..^suffix.Length] : className;
             return name.ToLowerInvariant();

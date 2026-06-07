@@ -177,7 +177,8 @@ public class ProjectAnalyzer
                             FullyQualifiedType = typeDisplay.FullyQualifiedType,
                             IsFromBody = HasAttribute(param, "FromBody"),
                             IsFromRoute = HasAttribute(param, "FromRoute"),
-                            IsFromQuery = HasAttribute(param, "FromQuery")
+                            IsFromQuery = HasAttribute(param, "FromQuery"),
+                            IsFromHeader = HasAttribute(param, "FromHeader")
                         };
 
                         // If the parameter is a user-defined class (DTO, Command, etc.)

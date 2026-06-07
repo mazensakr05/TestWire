@@ -23,6 +23,7 @@ For every controller TestWire finds, it produces a complete test project with:
 - **Auth test** — a `401 Unauthorized` test when `[Authorize]` is present
 - **Auto-generated .csproj** — includes all necessary NuGet packages for xUnit or NUnit
 - **Complex DTO support** — generated request objects handle nested properties and collections
+- **Query & Header analysis** — `[FromQuery]` and `[FromHeader]` parameters are detected and integrated into tests
 
 ```csharp
 // Your controller (SampleApi/Controllers/ProductsController.cs)
@@ -127,7 +128,6 @@ See [CHANGELOG.md](CHANGELOG.md) for the full history of changes.
 
 This is an early release. Here's what's not supported yet:
 
-- `[FromQuery]` and `[FromHeader]` parameters are not yet analyzed
 - No `--controller` flag to target a single controller
 - Mocking for internal service calls within integration tests (coming in v0.3)
 

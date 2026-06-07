@@ -37,6 +37,7 @@ public class ParameterDetail
     public bool IsFromBody { get; set; }
     public bool IsFromRoute { get; set; }
     public bool IsFromQuery { get; set; }
+    public bool IsFromHeader { get; set; }
 
     public List<PropertyDetail> DtoProperties { get; set; } = new();
 
