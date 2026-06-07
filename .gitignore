@@ -126,3 +126,11 @@ $RECYCLE.BIN/
 .fuse_hidden*
 .directory
 .trash
+
+# ------------------------------------------
+# AI and Tool-specific
+# ------------------------------------------
+GEMINI.md
+.gemini/
+.gemini_security/
+
