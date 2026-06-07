@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -36,7 +36,7 @@ namespace TestWire.cli.Generation
         }
 
         private static string ResolveControllerName(string className)
-        ...
+        {
             const string suffix = "Controller";
             var name = className.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) ? className[..^suffix.Length] : className;
             return name.ToLowerInvariant();
@@ -60,6 +60,7 @@ namespace TestWire.cli.Generation
                     return ResolveTokenValue(token, parameters);
                 });
         }
+
         private static string ResolveTokenValue(string token, List<ParameterDetail> parameters)
         {
             var match = parameters.FirstOrDefault(p =>
@@ -86,4 +87,3 @@ namespace TestWire.cli.Generation
         };
     }
 }
-
