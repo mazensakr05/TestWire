@@ -18,6 +18,7 @@ public static class TestFileGenerator
         var projectNamespace = controller.Namespace.Replace(".Controllers", "");
         sb.AppendLine($"using {projectNamespace};");
         sb.AppendLine($"using {projectNamespace}.DTOs;");
+        sb.AppendLine($"using {projectNamespace}.Models;");
         sb.AppendLine();
 
         // Namespace

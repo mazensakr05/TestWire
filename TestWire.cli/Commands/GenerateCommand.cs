@@ -74,9 +74,9 @@ public class GenerateCommand : Command
                 var rawOutput = context.ParseResult.GetValueForOption(outputOption);
 
                 var outputDir = rawOutput != null
-                    ? (Path.HasExtension(rawOutput)
-                        ? Path.GetDirectoryName(Path.GetFullPath(rawOutput))!
-                        : Path.GetFullPath(rawOutput))
+                    ? (Directory.Exists(rawOutput) || !Path.HasExtension(rawOutput)
+                        ? Path.GetFullPath(rawOutput)
+                        : Path.GetDirectoryName(Path.GetFullPath(rawOutput))!)
                     : Path.GetFullPath(Path.Combine(project.DirectoryName!, "..", $"{projectName}.Tests"));
 
                 TestProjectGenerator.Generate(project.FullName, outputDir, framework);

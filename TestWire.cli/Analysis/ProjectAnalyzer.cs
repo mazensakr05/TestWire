@@ -9,19 +9,36 @@ public class ProjectAnalyzer
 {
     public static async Task<List<ControllerInfo>> AnalyzeAsync(string csprojPath)
     {
-
         if (!Microsoft.Build.Locator.MSBuildLocator.IsRegistered)
-            Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
+        {
+            var instances = Microsoft.Build.Locator.MSBuildLocator.QueryVisualStudioInstances().ToList();
+            var instance = instances.FirstOrDefault(i => i.DiscoveryType == Microsoft.Build.Locator.DiscoveryType.DotNetSdk)
+                           ?? instances.FirstOrDefault();
+
+            if (instance != null)
+            {
+                Console.WriteLine($"Using MSBuild from: {instance.MSBuildPath}");
+                Microsoft.Build.Locator.MSBuildLocator.RegisterInstance(instance);
+            }
+            else
+            {
+                Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
+            }
+        }
+
         var controllers = new List<ControllerInfo>();
 
-        // Open the real .csproj using MSBuild — this gives us full type resolution
-        // across all referenced projects and NuGet packages
         using var workspace = MSBuildWorkspace.Create();
+        workspace.WorkspaceFailed += (s, e) => Console.WriteLine($"[MSBuild Warning] {e.Diagnostic.Message}");
+
         var project = await workspace.OpenProjectAsync(csprojPath);
         var compilation = await project.GetCompilationAsync();
 
         if (compilation == null)
-            throw new Exception("Failed to compile project.");
+        {
+            var diagnostics = workspace.Diagnostics.Select(d => d.Message).ToList();
+            throw new Exception($"Failed to compile project. Diagnostics: {string.Join(Environment.NewLine, diagnostics)}");
+        }
 
         foreach (var document in project.Documents)
         {
