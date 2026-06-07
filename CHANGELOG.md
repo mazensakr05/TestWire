@@ -2,6 +2,25 @@
 
 All notable changes to TestWire are documented here.
 
+## [0.2.0] - 2026-06-07
+
+### Added
+- **NUnit Support**: Full support for generating NUnit test files and project structures.
+- **Integration Testing**: Generated tests now use `WebApplicationFactory<Program>` by default for end-to-end integration testing.
+- **Project File Generation**: The tool now automatically generates a `.csproj` for the test project with all required package references (xUnit/NUnit, Mvc.Testing, etc.).
+- **Complex Type Support**: Improved analysis and generation for nested DTOs, collections, and complex generic return types.
+- **Enhanced Sample API**: A more comprehensive sample API with multiple controllers and complex data structures for demonstration.
+
+### Fixed
+- **Stability**: Stabilized MSBuild analysis by downgrading to Roslyn 4.8.0 and improving SDK discovery.
+- **Code Quality**: Fixed multiple formatting issues and unused `using` statements in generated output.
+- **Namespace Resolution**: Automatically includes `.Models` and `.DTOs` namespaces in test files.
+- **Method Naming**: Sanitized test method names for complex generic return types using regex.
+
+### Changed
+- **CLI Output**: Improved directory detection for the `--output` flag.
+- **CI/CD**: GitHub Actions now target .NET 9.0.
+
 ## [0.1.2] - 2026-05-31
 
 ### Fixed
