@@ -51,8 +51,8 @@ public static class MethodBodyBuilder
         sb.AppendLine($"        var response = {httpCall}");
 
         // Assertions — always runs
-        sb.AppendLine("        response.EnsureSuccessStatusCode();");
-
+        var expectedStatusCode = StatusCodeToHttpStatusCode(endpoint.ExpectedStatusCode);
+        sb.AppendLine($"        Assert.Equal({expectedStatusCode}, response.StatusCode);");
         if (!string.IsNullOrEmpty(endpoint.ReturnType))
         {
             sb.AppendLine($"        var result = await response.Content.ReadFromJsonAsync<{endpoint.ReturnType}>();");
@@ -69,13 +69,13 @@ public static class MethodBodyBuilder
     {
         if (string.IsNullOrEmpty(endpoint.ReturnType))
         {
-            return $"{endpoint.MethodName}_Returns200";
+            return $"{endpoint.MethodName}_Returns{endpoint.ExpectedStatusCode}";
         }
 
         var sanitizedType = Regex.Replace(endpoint.ReturnType, @"[^a-zA-Z0-9]", "_");
         sanitizedType = Regex.Replace(sanitizedType, @"_+", "_").Trim('_');
 
-        return $"{endpoint.MethodName}_Returns200_With{CapitalizeFirst(sanitizedType)}";
+        return $"{endpoint.MethodName}_Returns{endpoint.ExpectedStatusCode}_With{CapitalizeFirst(sanitizedType)}";
     }
 
     private static string CapitalizeFirst(string s) =>
@@ -91,5 +91,16 @@ public static class MethodBodyBuilder
         "decimal" => "1.0m",
         "double" or "float" => "1.0",
         _ => "null"
+    };
+    private static string StatusCodeToHttpStatusCode(int statusCode) => statusCode switch
+    {
+        200 => "HttpStatusCode.OK",
+        201 => "HttpStatusCode.Created",
+        202 => "HttpStatusCode.Accepted",
+        204 => "HttpStatusCode.NoContent",
+        400 => "HttpStatusCode.BadRequest",
+        404 => "HttpStatusCode.NotFound",
+        409 => "HttpStatusCode.Conflict",
+        _ => $"(HttpStatusCode){statusCode}"  // fallback for anything else
     };
 }
