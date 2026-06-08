@@ -22,6 +22,8 @@ public class EndpointInfo
     public bool HasAuthorize { get; set; }
     public bool HasAllowAnonymous { get; set; }
 
+    public int ExpectedStatusCode { get; set; } = 200;
+
     public List<ParameterDetail> Parameters { get; set; } = new();
 
     public List<ProducesResponseDetail> ProducesResponses { get; set; } = new();

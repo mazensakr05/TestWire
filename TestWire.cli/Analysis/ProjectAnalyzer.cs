@@ -1,4 +1,5 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using System.Reflection;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
@@ -145,7 +146,8 @@ public class ProjectAnalyzer
                         if (!string.IsNullOrEmpty(unwrapped))
                             returnTypeKind = ReturnTypeKind.IActionResultWithInferredT;
                     }
-
+                    // Detect the actual status code from return statements (Ok→200, CreatedAtAction→201 etc.)
+                    var detectedStatusCode = await TryInferStatusCodeFromBody(member, compilation);
                     // --- Build Endpoint ---
 
                     var endpointInfo = new EndpointInfo
@@ -162,6 +164,7 @@ public class ProjectAnalyzer
                         ReturnType = unwrapped,
                         ReturnTypeKind = returnTypeKind,
                         ProducesResponses = producesResponses,
+                        ExpectedStatusCode = detectedStatusCode ?? 200 , 
                         Parameters = new List<ParameterDetail>()
                     };
 
@@ -449,4 +452,55 @@ public class ProjectAnalyzer
 
         return null;
     }
+    private static async Task<int?> TryInferStatusCodeFromBody(IMethodSymbol methodSymbol, Compilation compilation)
+    {
+
+        var syntaxRef = methodSymbol.DeclaringSyntaxReferences.FirstOrDefault();
+        if (syntaxRef == null) return null;
+
+        var methodSyntax = await syntaxRef.GetSyntaxAsync() as MethodDeclarationSyntax;
+        if (methodSyntax == null) return null;
+
+        var statusCodeMap = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["Ok"] = 200,
+            ["Created"] = 201,
+            ["CreatedAtAction"] = 201,
+            ["CreatedAtRoute"] = 201,
+            ["Accepted"] = 202,
+            ["AcceptedAtAction"] = 202,
+            ["NoContent"] = 204,
+            ["BadRequest"] = 400,
+            ["NotFound"] = 404,
+            ["Conflict"] = 409,
+        };
+        IEnumerable<InvocationExpressionSyntax> invocations;
+        if (methodSyntax.Body != null)
+        {
+            invocations = methodSyntax.Body
+                .DescendantNodes()
+                .OfType<ReturnStatementSyntax>()
+                .Select(r => r.Expression)
+                .OfType<InvocationExpressionSyntax>();
+        }
+        else if (methodSyntax.ExpressionBody != null)
+        {
+            invocations = methodSyntax.ExpressionBody
+                .DescendantNodesAndSelf()
+                .OfType<InvocationExpressionSyntax>();
+        }
+        else return null;
+
+        foreach (var invocation in invocations)
+        {
+            var methodName = invocation.Expression is MemberAccessExpressionSyntax memberAccess
+                ? memberAccess.Name.Identifier.Text
+                : (invocation.Expression as IdentifierNameSyntax)?.Identifier.Text;
+            if (methodName != null && statusCodeMap.TryGetValue(methodName, out var code))
+                return code;
+        }
+        
+    
+    return null;
+}
 }
