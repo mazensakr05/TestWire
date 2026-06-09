@@ -96,6 +96,10 @@ public static class TestFileGenerator
             if (endpoint.HasAuthorize)
                 sb.Append(BuildUnauthorizedTest(endpoint, url, isNUnit));
 
+            // Step 4: if endpoint has a route param and is GET/PUT/DELETE, generate 404 test
+            if (ShouldGenerate404Test(endpoint))
+                sb.Append(MethodBodyBuilder.BuildNotFoundTest(endpoint, url));
+
         }
         // Close class
         sb.AppendLine("}");
@@ -133,5 +137,15 @@ public static class TestFileGenerator
         sb.AppendLine();
 
         return sb.ToString();
+    }
+    private static bool ShouldGenerate404Test(EndpointInfo endpoint)
+    {
+        // Only GET, PUT, DELETE make sense for 404 — POST creates new things
+        var supportedVerbs = new[] { "HttpGet", "HttpPut", "HttpDelete" };
+        if (!supportedVerbs.Contains(endpoint.HttpVerb))
+            return false;
+
+        // Only generate if the route actually has a parameter like {id}
+        return endpoint.Route.Contains("{") || endpoint.Parameters.Any(p => p.IsFromRoute);
     }
 }

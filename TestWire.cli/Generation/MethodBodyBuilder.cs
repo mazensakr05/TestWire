@@ -103,4 +103,31 @@ public static class MethodBodyBuilder
         409 => "HttpStatusCode.Conflict",
         _ => $"(HttpStatusCode){statusCode}"  // fallback for anything else
     };
+    public static string BuildNotFoundTest(EndpointInfo endpoint, string url)
+    {
+        var sb = new StringBuilder();
+
+        // Replace every route param value with a non-existent ID
+        // e.g. "api/products/1" becomes "api/products/99999"
+        var notFoundUrl = Regex.Replace(url, @"/\d+", "/99999");
+        notFoundUrl = Regex.Replace(notFoundUrl, @"/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", $"/{Guid.NewGuid()}");
+
+        sb.AppendLine("    [Fact]");
+        sb.AppendLine($"    public async Task {endpoint.MethodName}_Returns404_WhenNotFound()");
+        sb.AppendLine("    {");
+        sb.AppendLine($"        var response = await _client.{GetHttpMethod(endpoint.HttpVerb)}Async(\"{notFoundUrl}\");");
+        sb.AppendLine($"        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        return sb.ToString();
+    }
+
+    private static string GetHttpMethod(string httpVerb) => httpVerb switch
+    {
+        "HttpGet" => "Get",
+        "HttpDelete" => "Delete",
+        "HttpPut" => "Put",
+        _ => "Get"
+    };
 }
