@@ -14,35 +14,23 @@ public class GenerateCommand : Command
                 description: "Path to the .csproj file to analyze")
         { IsRequired = true };
 
-        var frameworkOption = new Option<string>(
-            name: "--framework",
-            description: "Test framework to use: xunit or nunit",
-            getDefaultValue: () => "xunit");
         var outputOption = new Option<string?>(
-    name: "--output",
-    description: "File or directory path for generated test files");
+            name: "--output",
+            description: "File or directory path for generated test files");
 
         var dryRunOption = new Option<bool>(
             name: "--dry-run",
             description: "Print output to console without writing files");
 
-        var reportOption = new Option<bool>(
-            name: "--report",
-            description: "Generate a testwire-report.md summary file");
-
         AddOption(projectOption);
-        AddOption(frameworkOption);
         AddOption(outputOption);
         AddOption(dryRunOption);
-        AddOption(reportOption);
 
         this.SetHandler(async (InvocationContext context) =>
         {
             var project = context.ParseResult.GetValueForOption(projectOption)!;
-            var framework = context.ParseResult.GetValueForOption(frameworkOption)!;
             var output = context.ParseResult.GetValueForOption(outputOption);
             var dryRun = context.ParseResult.GetValueForOption(dryRunOption);
-            var report = context.ParseResult.GetValueForOption(reportOption);
 
             Console.WriteLine($"Analyzing {project.FullName}...");
 
@@ -58,7 +46,7 @@ public class GenerateCommand : Command
             {
                 foreach (var controller in controllers)
                 {
-                    var content = TestFileGenerator.Generate(controller, framework);
+                    var content = TestFileGenerator.Generate(controller);
                     Console.WriteLine("\n--- Generated Test File ---");
                     Console.WriteLine(content);
 
@@ -79,11 +67,11 @@ public class GenerateCommand : Command
                         : Path.GetDirectoryName(Path.GetFullPath(rawOutput))!)
                     : Path.GetFullPath(Path.Combine(project.DirectoryName!, "..", $"{projectName}.Tests"));
 
-                TestProjectGenerator.Generate(project.FullName, outputDir, framework);
+                TestProjectGenerator.Generate(project.FullName, outputDir);
 
                 foreach (var controller in controllers)
                 {
-                    var content = TestFileGenerator.Generate(controller, framework);
+                    var content = TestFileGenerator.Generate(controller);
                     var fileName = $"{controller.ClassName}Tests.cs";
                     var filePath = Path.Combine(outputDir, fileName);
 
