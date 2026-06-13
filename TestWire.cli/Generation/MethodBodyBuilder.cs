@@ -8,13 +8,13 @@ public static class MethodBodyBuilder
 {
 
 
-    public static string Build(EndpointInfo endpoint, string url)
+    public static string Build(EndpointInfo endpoint, string url , bool isNUnit = false)
     {
         var sb = new StringBuilder();
         var testName = BuildTestName(endpoint);
         var bodyParam = endpoint.Parameters.FirstOrDefault(p => p.IsFromBody);
 
-        sb.AppendLine("    [Fact]");
+        sb.AppendLine(isNUnit ? "    [Test]" : "    [Fact]");
         sb.AppendLine($"    public async Task {testName}()");
         sb.AppendLine("    {");
 
@@ -121,6 +121,94 @@ public static class MethodBodyBuilder
         sb.AppendLine();
 
         return sb.ToString();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // METHOD 1: The public method that generates the full 404 test
+    // ─────────────────────────────────────────────────────────────
+    public static string BuildNotFoundTest(EndpointInfo endpoint, string baseRoute, string className, bool isNUnit = false)
+    {
+        var sb = new StringBuilder();
+
+        // Step 1: Build the 404 URL using invalid values
+        var notFoundUrl = BuildNotFoundUrl(endpoint, baseRoute, className);
+
+        // Step 2: Framework-aware attribute — Bug #1 lesson applied here too
+        sb.AppendLine(isNUnit ? "    [Test]" : "    [Fact]");
+        sb.AppendLine($"    public async Task {endpoint.MethodName}_Returns404_WhenNotFound()");
+        sb.AppendLine("    {");
+
+        // Step 3: HTTP call — PUT/PATCH need a body (Bug #3 handled here)
+        var httpCall = endpoint.HttpVerb switch
+        {
+            "HttpPut" => $"await _client.PutAsJsonAsync(\"{notFoundUrl}\", new {{ }});",
+            "HttpPatch" => $"await _client.PatchAsJsonAsync(\"{notFoundUrl}\", new {{ }});",
+            "HttpDelete" => $"await _client.DeleteAsync(\"{notFoundUrl}\");",
+            _ => $"await _client.GetAsync(\"{notFoundUrl}\");"  // GET default
+        };
+
+        sb.AppendLine($"        var response = {httpCall}");
+
+        // Step 4: Framework-aware assertion
+        if (isNUnit)
+            sb.AppendLine("        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));");
+        else
+            sb.AppendLine("        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);");
+
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        return sb.ToString();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // METHOD 2: The private helper that builds the 404 URL safely
+    // ─────────────────────────────────────────────────────────────
+    private static string BuildNotFoundUrl(EndpointInfo endpoint, string baseRoute, string className)
+    {
+        // Start from the RAW route template — NOT the final built URL
+        // e.g. endpoint.Route = "{id}"
+        //      baseRoute      = "api/v1/[controller]"
+        //      className      = "ProductsController"
+
+        // Resolve [controller] token — same logic RouteBuilder uses
+        const string suffix = "Controller";
+        var controllerName = className.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+            ? className[..^suffix.Length].ToLowerInvariant()
+            : className.ToLowerInvariant();
+
+        var resolvedBase = baseRoute.Replace("[controller]", controllerName, StringComparison.OrdinalIgnoreCase);
+
+        // Combine base + endpoint route segment
+        var combined = string.IsNullOrWhiteSpace(endpoint.Route)
+            ? resolvedBase.Trim('/')
+            : $"{resolvedBase.Trim('/')}/{endpoint.Route.Trim('/')}";
+
+        // NOW replace {placeholders} with INVALID values based on type
+        // This is surgical — only touches {id}, never touches "v1" or other literals
+        var result = System.Text.RegularExpressions.Regex.Replace(
+            combined,
+            @"\{([^}]+)\}",   // matches {id}, {categoryId}, {id:int} etc.
+            match =>
+            {
+                // Strip constraint: "{id:int}" → "id"
+                var paramName = match.Groups[1].Value.Split(':')[0];
+
+                // Find this param in the endpoint's parameter list
+                var param = endpoint.Parameters.FirstOrDefault(p =>
+                    p.IsFromRoute &&
+                    p.Name.Equals(paramName, StringComparison.OrdinalIgnoreCase));
+
+                // Return an INVALID value based on the param's type
+                return param?.Type.ToLowerInvariant() switch
+                {
+                    "guid" => Guid.NewGuid().ToString(), // random guid — guaranteed not in DB
+                    "string" => "nonexistent-xyz-404",   // string that won't match any real record
+                    _ => "99999"                          // int/long/anything else
+                };
+            });
+
+        return result;
     }
 
     private static string GetHttpMethod(string httpVerb) => httpVerb switch

@@ -72,34 +72,27 @@ public static class TestFileGenerator
         // Generate one test method per endpoint
         foreach (var endpoint in controller.Endpoints)
         {
-            // Step 1: build the real URL for this endpoint
+            // Step 1: Build the happy path URL
             var url = RouteBuilder.Build(
                 controller.BaseRoute,
                 controller.ClassName,
                 endpoint.Route,
                 endpoint.Parameters);
 
-            // Step 2: build the happy path test method
-            var testBody = MethodBodyBuilder.Build(endpoint, url);
-            if (isNUnit)
-            {
-                testBody = testBody.Replace("[Fact]", "[Test]")
-                                 .Replace("Assert.Equal(", "Assert.That(")
-                                 .Replace("Assert.NotNull(", "Assert.That(")
-                                 .Replace("Assert.Null(", "Assert.That(");
-                                 // Simple replacement for NUnit Assert.That syntax might be complex, 
-                                 // let's stick to simple ones or use NUnit Classic Assert if available
-            }
-            sb.Append(testBody);
+            // Step 2: Happy path test — pass isNUnit directly (Bug #1 fix)
+            sb.Append(MethodBodyBuilder.Build(endpoint, url, isNUnit));
 
-            // Step 3: if endpoint requires auth, generate a 401 test too
+            // Step 3: 401 test — only if endpoint requires auth
             if (endpoint.HasAuthorize)
                 sb.Append(BuildUnauthorizedTest(endpoint, url, isNUnit));
 
-            // Step 4: if endpoint has a route param and is GET/PUT/DELETE, generate 404 test
+            // Step 4: 404 test — only if endpoint is the right verb AND has route params
             if (ShouldGenerate404Test(endpoint))
-                sb.Append(MethodBodyBuilder.BuildNotFoundTest(endpoint, url));
-
+                sb.Append(MethodBodyBuilder.BuildNotFoundTest(
+                    endpoint,
+                    controller.BaseRoute,
+                    controller.ClassName,
+                    isNUnit));
         }
         // Close class
         sb.AppendLine("}");
@@ -138,14 +131,17 @@ public static class TestFileGenerator
 
         return sb.ToString();
     }
+
     private static bool ShouldGenerate404Test(EndpointInfo endpoint)
     {
-        // Only GET, PUT, DELETE make sense for 404 — POST creates new things
-        var supportedVerbs = new[] { "HttpGet", "HttpPut", "HttpDelete" };
-        if (!supportedVerbs.Contains(endpoint.HttpVerb))
-            return false;
+        // Only these verbs make sense for a 404 test
+        // POST is excluded — POST creates resources, doesn't look them up by ID
+        var supportedVerbs = new[] { "HttpGet", "HttpPut", "HttpDelete", "HttpPatch" };
 
-        // Only generate if the route actually has a parameter like {id}
-        return endpoint.Route.Contains("{") || endpoint.Parameters.Any(p => p.IsFromRoute);
+        // Must be a supported verb AND must have at least one route parameter
+        // No route param = no ID = no way to get a 404 by ID
+        return supportedVerbs.Contains(endpoint.HttpVerb)
+            && endpoint.Parameters.Any(p => p.IsFromRoute);
     }
+
 }
