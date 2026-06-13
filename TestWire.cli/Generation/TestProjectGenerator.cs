@@ -3,10 +3,8 @@ namespace TestWire.cli.Generation;
 
 public class TestProjectGenerator
 {
-    public static void Generate(string targetCsprojPath, string outputDir, string framework = "xunit")
+    public static void Generate(string targetCsprojPath, string outputDir)
     {
-        // outputDir might be a file path like "SampleApi.Tests\ProductsControllerTests.cs"
-        // We only want the directory part
         var resolvedDir = File.Exists(outputDir) || Path.HasExtension(outputDir)
             ? Path.GetDirectoryName(outputDir)!
             : outputDir;
@@ -19,23 +17,6 @@ public class TestProjectGenerator
         var targetFramework = DetectTargetFramework(targetCsprojPath);
         var relativePath = Path.GetRelativePath(resolvedDir, targetCsprojPath);
 
-        var isNUnit = framework.Equals("nunit", StringComparison.OrdinalIgnoreCase);
-
-        var packages = isNUnit
-            ? """
-                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-                <PackageReference Include="NUnit" Version="4.2.2" />
-                <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
-                <PackageReference Include="NUnit.Analyzers" Version="4.3.0" />
-                <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.0" />
-              """
-            : """
-                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-                <PackageReference Include="xunit" Version="2.9.0" />
-                <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
-                <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.0" />
-              """;
-
         var content = $"""
                    <Project Sdk="Microsoft.NET.Sdk">
 
@@ -47,7 +28,10 @@ public class TestProjectGenerator
                      </PropertyGroup>
 
                      <ItemGroup>
-                       {packages}
+                       <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+                       <PackageReference Include="xunit" Version="2.9.0" />
+                       <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+                       <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.0" />
                      </ItemGroup>
 
                      <ItemGroup>
@@ -74,5 +58,4 @@ public class TestProjectGenerator
 
         return "net8.0";
     }
-
 }
