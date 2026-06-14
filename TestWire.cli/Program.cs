@@ -1,19 +1,10 @@
-﻿using System.CommandLine;
+using System.CommandLine;
 using TestWire.cli.Commands;
 
-try
-{
-	if (!Microsoft.Build.Locator.MSBuildLocator.IsRegistered)
-		Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
-}
-catch (Exception ex)
-{
-	Console.ForegroundColor = ConsoleColor.Red;
-	Console.Error.WriteLine($"[TestWire] Failed to initialize MSBuild: {ex.Message}");
-	Console.Error.WriteLine("Make sure the .NET SDK is installed and accessible.");
-	Console.ResetColor();
-	return 1;
-}
+// MSBuild registration is intentionally deferred to ProjectAnalyzer.AnalyzeAsync().
+// Registering here (before any MSBuild types are loaded) can race or conflict;
+// the analyzer handles multi-strategy discovery that works across SDK-only machines,
+// Visual Studio installations, and CI environments.
 
 var rootCommand = new RootCommand("TestWire - Auto-generate integration test stubs for ASP.NET Core controllers");
 

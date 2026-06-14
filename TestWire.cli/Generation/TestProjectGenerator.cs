@@ -1,9 +1,10 @@
 using System.Xml.Linq;
+
 namespace TestWire.cli.Generation;
 
 public class TestProjectGenerator
 {
-    public static void Generate(string targetCsprojPath, string outputDir)
+    public static void Generate(string targetCsprojPath, string outputDir, string projectNamespace)
     {
         var resolvedDir = File.Exists(outputDir) || Path.HasExtension(outputDir)
             ? Path.GetDirectoryName(outputDir)!
@@ -11,8 +12,6 @@ public class TestProjectGenerator
 
         var projectName = Path.GetFileNameWithoutExtension(targetCsprojPath);
         var testCsprojPath = Path.Combine(resolvedDir, $"{projectName}.Tests.csproj");
-
-        if (File.Exists(testCsprojPath)) return;
 
         var targetFramework = DetectTargetFramework(targetCsprojPath);
         var relativePath = Path.GetRelativePath(resolvedDir, targetCsprojPath);
@@ -42,7 +41,24 @@ public class TestProjectGenerator
                    """;
 
         Directory.CreateDirectory(resolvedDir);
-        File.WriteAllText(testCsprojPath, content);
+
+        // Write the .csproj if it doesn't exist
+        if (!File.Exists(testCsprojPath))
+        {
+            File.WriteAllText(testCsprojPath, content);
+        }
+
+        // Write auth scaffold files - these are infrastructure files every
+        // generated test project needs to compile and run against [Authorize] endpoints
+        var authHandlerPath = Path.Combine(resolvedDir, "TestAuthHandler.cs");
+        var factoryPath = Path.Combine(resolvedDir, "CustomWebApplicationFactory.cs");
+
+        // Write these if they are missing or if we want to ensure latest version
+        if (!File.Exists(authHandlerPath))
+            TestFileWriter.Write(authHandlerPath, AuthScaffoldGenerator.GenerateTestAuthHandler(projectNamespace));
+
+        if (!File.Exists(factoryPath))
+            TestFileWriter.Write(factoryPath, AuthScaffoldGenerator.GenerateCustomWebApplicationFactory(projectNamespace));
     }
 
     private static string DetectTargetFramework(string csprojPath)

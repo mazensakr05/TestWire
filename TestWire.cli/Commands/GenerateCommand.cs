@@ -10,8 +10,8 @@ public class GenerateCommand : Command
     public GenerateCommand() : base("generate", "Scan a .csproj and generate test stubs")
     {
         var projectOption = new Option<FileInfo>(
-                name: "--project",
-                description: "Path to the .csproj file to analyze")
+            name: "--project",
+            description: "Path to the .csproj file to analyze")
         { IsRequired = true };
 
         var outputOption = new Option<string?>(
@@ -51,9 +51,7 @@ public class GenerateCommand : Command
                     Console.WriteLine(content);
 
                     foreach (var endpoint in controller.Endpoints)
-                    {
                         Console.WriteLine($"    [{endpoint.HttpVerb}] {endpoint.MethodName} → {endpoint.Route}");
-                    }
                 }
             }
             else
@@ -67,7 +65,13 @@ public class GenerateCommand : Command
                         : Path.GetDirectoryName(Path.GetFullPath(rawOutput))!)
                     : Path.GetFullPath(Path.Combine(project.DirectoryName!, "..", $"{projectName}.Tests"));
 
-                TestProjectGenerator.Generate(project.FullName, outputDir);
+                // Derive root namespace from first controller
+                // e.g. "MyApp.Controllers.Admin" → "MyApp"
+                // All controllers in the same project share the same root namespace
+                var projectNamespace = controllers[0].Namespace.Replace(".Controllers", "");
+
+                // Generate .csproj + TestAuthHandler.cs + CustomWebApplicationFactory.cs
+                TestProjectGenerator.Generate(project.FullName, outputDir, projectNamespace);
 
                 foreach (var controller in controllers)
                 {
@@ -79,9 +83,7 @@ public class GenerateCommand : Command
                     Console.WriteLine($"  ✅ Written → {filePath}");
 
                     foreach (var endpoint in controller.Endpoints)
-                    {
                         Console.WriteLine($"    [{endpoint.HttpVerb}] {endpoint.MethodName} → {endpoint.Route}");
-                    }
                 }
             }
         });

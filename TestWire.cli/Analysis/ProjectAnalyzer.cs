@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -12,19 +12,7 @@ public class ProjectAnalyzer
     {
         if (!Microsoft.Build.Locator.MSBuildLocator.IsRegistered)
         {
-            var instances = Microsoft.Build.Locator.MSBuildLocator.QueryVisualStudioInstances().ToList();
-            var instance = instances.FirstOrDefault(i => i.DiscoveryType == Microsoft.Build.Locator.DiscoveryType.DotNetSdk)
-                           ?? instances.FirstOrDefault();
-
-            if (instance != null)
-            {
-                Console.WriteLine($"Using MSBuild from: {instance.MSBuildPath}");
-                Microsoft.Build.Locator.MSBuildLocator.RegisterInstance(instance);
-            }
-            else
-            {
-                Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
-            }
+            RegisterMSBuild();
         }
 
         var controllers = new List<ControllerInfo>();
@@ -254,6 +242,162 @@ public class ProjectAnalyzer
         }
 
         return dependencies;
+    }
+
+    /// <summary>
+    /// Registers the MSBuild assemblies using a robust multi-strategy waterfall.
+    ///
+    /// Strategy 1 — QueryVisualStudioInstances (SDK-first):
+    ///   Uses MSBuildLocator's built-in discovery. On most developer machines this finds
+    ///   the installed .NET SDK automatically. We prefer DotNetSdk over VS instances.
+    ///
+    /// Strategy 2 — Subprocess dotnet CLI fallback:
+    ///   If the locator finds nothing (common on CI runners, minimal Docker images,
+    ///   or machines where DOTNET_ROOT is not set as a system env-var), we run
+    ///   `dotnet --list-sdks` ourselves to discover the SDK location and call
+    ///   RegisterMSBuildPath() directly on the resolved MSBuild folder.
+    ///
+    /// This is the same pattern used by dotnet-format and other Roslyn-based tools
+    /// to work portably across every machine without requiring DOTNET_ROOT or VS.
+    /// </summary>
+    private static void RegisterMSBuild()
+    {
+        // ── Strategy 1: use the built-in locator ──────────────────────────────
+        var instances = Microsoft.Build.Locator.MSBuildLocator.QueryVisualStudioInstances().ToList();
+
+        // Prefer a .NET SDK entry (not VS); fall back to any found instance
+        var best = instances.FirstOrDefault(i =>
+                       i.DiscoveryType == Microsoft.Build.Locator.DiscoveryType.DotNetSdk)
+                   ?? instances.FirstOrDefault();
+
+        if (best != null)
+        {
+            Console.WriteLine($"[TestWire] Using MSBuild from: {best.MSBuildPath}");
+            Microsoft.Build.Locator.MSBuildLocator.RegisterInstance(best);
+            return;
+        }
+
+        // ── Strategy 2: discover SDK via `dotnet --list-sdks` subprocess ──────
+        // This covers SDK-only machines, CI runners, and any machine where the
+        // built-in discovery cannot enumerate instances from the environment.
+        Console.WriteLine("[TestWire] MSBuildLocator found no instances; falling back to dotnet CLI discovery…");
+
+        var sdkPath = TryResolveSdkPathViaCli();
+        if (sdkPath != null)
+        {
+            var msbuildPath = Path.Combine(sdkPath, "MSBuild.dll");
+            if (File.Exists(msbuildPath))
+            {
+                Console.WriteLine($"[TestWire] Registering MSBuild at: {sdkPath}");
+                Microsoft.Build.Locator.MSBuildLocator.RegisterMSBuildPath(sdkPath);
+                return;
+            }
+        }
+
+        // ── Last resort: let RegisterDefaults throw a clear error ──────────────
+        // If we reach here the .NET SDK is genuinely not installed or broken.
+        try
+        {
+            Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
+        }
+        catch (Exception inner)
+        {
+            throw new InvalidOperationException(
+                "[TestWire] Could not locate MSBuild. " +
+                "Make sure the .NET SDK is installed (https://dot.net) and that " +
+                "`dotnet --version` works in your terminal. " +
+                $"Inner error: {inner.Message}", inner);
+        }
+    }
+
+    /// <summary>
+    /// Runs `dotnet --list-sdks` and returns the directory of the highest-version SDK,
+    /// or null if the dotnet CLI is not reachable or returns nothing useful.
+    /// </summary>
+    private static string? TryResolveSdkPathViaCli()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("dotnet", "--list-sdks")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError  = true,
+                UseShellExecute        = false,
+                CreateNoWindow         = true,
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc == null) return null;
+
+            var output = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit(5_000); // never hang the CLI for more than 5 s
+
+            // Output format from `dotnet --list-sdks`:
+            //   9.0.306 [C:\Program Files\dotnet\sdk]
+            //   10.0.100 [C:\Program Files\dotnet\sdk]
+            //
+            // The bracketed part is the BASE directory for all SDKs.
+            // The actual version folder is: [base]\[version]  e.g.
+            //   C:\Program Files\dotnet\sdk\9.0.306\MSBuild.dll
+            var sdkVersionDirs = output
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line =>
+                {
+                    line = line.Trim();
+                    var spaceIdx = line.IndexOf(' ');
+                    if (spaceIdx < 0) return null;
+
+                    var version = line.Substring(0, spaceIdx).Trim();
+
+                    var start = line.IndexOf('[');
+                    var end   = line.IndexOf(']');
+                    if (start < 0 || end <= start) return null;
+
+                    var baseDir = line.Substring(start + 1, end - start - 1).Trim();
+
+                    // Combine base directory with the version subfolder
+                    return Path.Combine(baseDir, version);
+                })
+                .Where(d => d != null && Directory.Exists(d))
+                .ToList();
+
+            // Pick the highest semantic version SDK that:
+            // 1. actually has MSBuild.dll
+            // 2. has the same major version as the currently running .NET runtime
+            //    (e.g. if we run under net8, prefer an 8.x SDK not a 10.x one —
+            //     loading a .NET 10 MSBuild from a net8 process causes assembly
+            //     binding failures for System.Runtime v10).
+            var runtimeMajor = Environment.Version.Major;
+
+            var compatible = sdkVersionDirs
+                .Where(d => File.Exists(Path.Combine(d!, "MSBuild.dll")))
+                .Select(d =>
+                {
+                    var versionPart = Path.GetFileName(d!);
+                    Version.TryParse(versionPart, out var v);
+                    return (Path: d, Version: v ?? new Version(0, 0));
+                })
+                .OrderByDescending(x => x.Version)
+                .ToList();
+
+            // First try: same major version as the running runtime
+            var best = compatible.FirstOrDefault(x => x.Version.Major == runtimeMajor);
+
+            // Fallback: any lower major version (still safer than a newer one)
+            if (best.Path == null)
+                best = compatible.FirstOrDefault(x => x.Version.Major < runtimeMajor);
+
+            // Last fallback: whatever we have (better than nothing)
+            if (best.Path == null)
+                best = compatible.FirstOrDefault();
+
+            return best.Path;
+        }
+        catch
+        {
+            // dotnet CLI not on PATH — nothing we can do here
+            return null;
+        }
     }
 
     private static string UnwrapReturnType(ITypeSymbol typeSymbol)
