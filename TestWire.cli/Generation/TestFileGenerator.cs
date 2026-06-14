@@ -44,7 +44,7 @@ public static class TestFileGenerator
         sb.AppendLine("        _client = factory.CreateClient();");
         sb.AppendLine("        _authClient = factory.CreateClient();");
         sb.AppendLine("        _authClient.DefaultRequestHeaders.Authorization =");
-        sb.AppendLine("            new AuthenticationHeaderValue(\"Test\", \"testwire\");");
+        sb.AppendLine("            new AuthenticationHeaderValue(\"Bearer\", \"testwire\");");
         sb.AppendLine("    }");
         sb.AppendLine();
 

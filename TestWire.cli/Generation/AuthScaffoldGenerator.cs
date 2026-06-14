@@ -31,12 +31,13 @@ public static class AuthScaffoldGenerator
         sb.AppendLine("        var claims = new[]");
         sb.AppendLine("        {");
         sb.AppendLine("            new Claim(ClaimTypes.Name, \"testwire-user\"),");
+        sb.AppendLine("            new Claim(ClaimTypes.NameIdentifier, \"1\"),");
         sb.AppendLine("            new Claim(ClaimTypes.Role, \"Admin\"),");
         sb.AppendLine("        };");
         sb.AppendLine();
-        sb.AppendLine("        var identity  = new ClaimsIdentity(claims, \"Test\");");
+        sb.AppendLine("        var identity  = new ClaimsIdentity(claims, \"Bearer\");");
         sb.AppendLine("        var principal = new ClaimsPrincipal(identity);");
-        sb.AppendLine("        var ticket    = new AuthenticationTicket(principal, \"Test\");");
+        sb.AppendLine("        var ticket    = new AuthenticationTicket(principal, \"Bearer\");");
         sb.AppendLine();
         sb.AppendLine("        return Task.FromResult(AuthenticateResult.Success(ticket));");
         sb.AppendLine("    }");
@@ -54,6 +55,7 @@ public static class AuthScaffoldGenerator
         sb.AppendLine("using Microsoft.AspNetCore.Mvc.Testing;");
         sb.AppendLine("using Microsoft.AspNetCore.TestHost;");
         sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
+        sb.AppendLine($"using {projectNamespace};");
         sb.AppendLine();
         sb.AppendLine($"namespace {projectNamespace}.Tests;");
         sb.AppendLine();
@@ -63,8 +65,12 @@ public static class AuthScaffoldGenerator
         sb.AppendLine("    {");
         sb.AppendLine("        builder.ConfigureTestServices(services =>");
         sb.AppendLine("        {");
-        sb.AppendLine("            services.AddAuthentication(\"Test\")");
-        sb.AppendLine("                    .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(\"Test\", _ => { });");
+        sb.AppendLine("            services.AddAuthentication(options =>");
+        sb.AppendLine("            {");
+        sb.AppendLine("                options.DefaultAuthenticateScheme = \"Bearer\";");
+        sb.AppendLine("                options.DefaultChallengeScheme = \"Bearer\";");
+        sb.AppendLine("            })");
+        sb.AppendLine("            .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(\"Bearer\", _ => { });");
         sb.AppendLine("        });");
         sb.AppendLine("    }");
         sb.AppendLine("}");

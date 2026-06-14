@@ -4,7 +4,6 @@ namespace TestWire.cli.Generation;
 
 public class TestProjectGenerator
 {
-    // projectNamespace added — needed to generate correct namespace in auth scaffold files
     public static void Generate(string targetCsprojPath, string outputDir, string projectNamespace)
     {
         var resolvedDir = File.Exists(outputDir) || Path.HasExtension(outputDir)
@@ -13,10 +12,6 @@ public class TestProjectGenerator
 
         var projectName = Path.GetFileNameWithoutExtension(targetCsprojPath);
         var testCsprojPath = Path.Combine(resolvedDir, $"{projectName}.Tests.csproj");
-
-        // Guard — if the test project already exists, skip everything
-        // This means auth files are also only written once (on first generation)
-        if (File.Exists(testCsprojPath)) return;
 
         var targetFramework = DetectTargetFramework(targetCsprojPath);
         var relativePath = Path.GetRelativePath(resolvedDir, targetCsprojPath);
@@ -47,16 +42,23 @@ public class TestProjectGenerator
 
         Directory.CreateDirectory(resolvedDir);
 
-        // Write the .csproj
-        File.WriteAllText(testCsprojPath, content);
+        // Write the .csproj if it doesn't exist
+        if (!File.Exists(testCsprojPath))
+        {
+            File.WriteAllText(testCsprojPath, content);
+        }
 
-        // Write auth scaffold files — these are infrastructure files every
+        // Write auth scaffold files - these are infrastructure files every
         // generated test project needs to compile and run against [Authorize] endpoints
         var authHandlerPath = Path.Combine(resolvedDir, "TestAuthHandler.cs");
         var factoryPath = Path.Combine(resolvedDir, "CustomWebApplicationFactory.cs");
 
-        TestFileWriter.Write(authHandlerPath, AuthScaffoldGenerator.GenerateTestAuthHandler(projectNamespace));
-        TestFileWriter.Write(factoryPath, AuthScaffoldGenerator.GenerateCustomWebApplicationFactory(projectNamespace));
+        // Write these if they are missing or if we want to ensure latest version
+        if (!File.Exists(authHandlerPath))
+            TestFileWriter.Write(authHandlerPath, AuthScaffoldGenerator.GenerateTestAuthHandler(projectNamespace));
+
+        if (!File.Exists(factoryPath))
+            TestFileWriter.Write(factoryPath, AuthScaffoldGenerator.GenerateCustomWebApplicationFactory(projectNamespace));
     }
 
     private static string DetectTargetFramework(string csprojPath)
