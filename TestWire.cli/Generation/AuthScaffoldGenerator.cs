@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 
 namespace TestWire.cli.Generation;
 
@@ -28,6 +28,11 @@ public static class AuthScaffoldGenerator
         sb.AppendLine();
         sb.AppendLine("    protected override Task<AuthenticateResult> HandleAuthenticateAsync()");
         sb.AppendLine("    {");
+        sb.AppendLine("        if (!Request.Headers.ContainsKey(\"Authorization\"))");
+        sb.AppendLine("        {");
+        sb.AppendLine("            return Task.FromResult(AuthenticateResult.NoResult());");
+        sb.AppendLine("        }");
+        sb.AppendLine();
         sb.AppendLine("        var claims = new[]");
         sb.AppendLine("        {");
         sb.AppendLine("            new Claim(ClaimTypes.Name, \"testwire-user\"),");
@@ -35,9 +40,9 @@ public static class AuthScaffoldGenerator
         sb.AppendLine("            new Claim(ClaimTypes.Role, \"Admin\"),");
         sb.AppendLine("        };");
         sb.AppendLine();
-        sb.AppendLine("        var identity  = new ClaimsIdentity(claims, \"Bearer\");");
+        sb.AppendLine("        var identity  = new ClaimsIdentity(claims, \"Test\");");
         sb.AppendLine("        var principal = new ClaimsPrincipal(identity);");
-        sb.AppendLine("        var ticket    = new AuthenticationTicket(principal, \"Bearer\");");
+        sb.AppendLine("        var ticket    = new AuthenticationTicket(principal, \"Test\");");
         sb.AppendLine();
         sb.AppendLine("        return Task.FromResult(AuthenticateResult.Success(ticket));");
         sb.AppendLine("    }");
@@ -67,10 +72,10 @@ public static class AuthScaffoldGenerator
         sb.AppendLine("        {");
         sb.AppendLine("            services.AddAuthentication(options =>");
         sb.AppendLine("            {");
-        sb.AppendLine("                options.DefaultAuthenticateScheme = \"Bearer\";");
-        sb.AppendLine("                options.DefaultChallengeScheme = \"Bearer\";");
+        sb.AppendLine("                options.DefaultAuthenticateScheme = \"Test\";");
+        sb.AppendLine("                options.DefaultChallengeScheme = \"Test\";");
         sb.AppendLine("            })");
-        sb.AppendLine("            .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(\"Bearer\", _ => { });");
+        sb.AppendLine("            .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(\"Test\", _ => { });");
         sb.AppendLine("        });");
         sb.AppendLine("    }");
         sb.AppendLine("}");
