@@ -1,5 +1,4 @@
-using System.Diagnostics;
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
@@ -10,24 +9,16 @@ public class ProjectAnalyzer
 {
     public static async Task<List<ControllerInfo>> AnalyzeAsync(string csprojPath)
     {
-        if (!Microsoft.Build.Locator.MSBuildLocator.IsRegistered)
-        {
-            RegisterMSBuild();
-        }
-
         var controllers = new List<ControllerInfo>();
 
+        // Open the real .csproj using MSBuild — this gives us full type resolution
+        // across all referenced projects and NuGet packages
         using var workspace = MSBuildWorkspace.Create();
-        workspace.WorkspaceFailed += (s, e) => Console.WriteLine($"[MSBuild Warning] {e.Diagnostic.Message}");
-
         var project = await workspace.OpenProjectAsync(csprojPath);
         var compilation = await project.GetCompilationAsync();
 
         if (compilation == null)
-        {
-            var diagnostics = workspace.Diagnostics.Select(d => d.Message).ToList();
-            throw new Exception($"Failed to compile project. Diagnostics: {string.Join(Environment.NewLine, diagnostics)}");
-        }
+            throw new Exception("Failed to compile project.");
 
         foreach (var document in project.Documents)
         {
@@ -63,13 +54,15 @@ public class ProjectAnalyzer
                 if (primaryTree != null && classDecl.SyntaxTree != primaryTree)
                     continue;
 
-                var controllerInfo = new ControllerInfo
-                {
-                    ClassName = classSymbol.Name,
-                    Namespace = classSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty,
-                    BaseRoute = GetAttributeArgument(classSymbol, "Route") ?? string.Empty,
-                    Dependencies = GetConstructorDependencies(classSymbol),
-                };
+                var endpoints = new List<EndpointInfo>();
+                
+                var controllerInfo = new ControllerInfo(
+                    classSymbol.Name,
+                    classSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty,
+                    GetAttributeArgument(classSymbol, "Route") ?? string.Empty,
+                    endpoints,
+                    GetConstructorDependencies(classSymbol)
+                );
 
                 // Iterate methods via symbol — not syntax — for full attribute resolution
                 foreach (var member in classSymbol.GetMembers().OfType<IMethodSymbol>())
@@ -134,10 +127,10 @@ public class ProjectAnalyzer
                         if (!string.IsNullOrEmpty(unwrapped))
                             returnTypeKind = ReturnTypeKind.IActionResultWithInferredT;
                     }
-                    // Detect the actual status code from return statements (Ok→200, CreatedAtAction→201 etc.)
-                    var detectedStatusCode = await TryInferStatusCodeFromBody(member, compilation);
+
                     // --- Build Endpoint ---
 
+<<<<<<< Updated upstream
                     var endpointInfo = new EndpointInfo
                     {
                         MethodName = member.Name,
@@ -152,15 +145,18 @@ public class ProjectAnalyzer
                         ReturnType = unwrapped,
                         ReturnTypeKind = returnTypeKind,
                         ProducesResponses = producesResponses,
-                        ExpectedStatusCode = detectedStatusCode ?? 200 , 
                         Parameters = new List<ParameterDetail>()
                     };
 
                     // --- Build Parameters ---
+=======
+                    var parameters = new List<ParameterDetail>();
+>>>>>>> Stashed changes
 
                     foreach (var param in member.Parameters)
                     {
                         var typeDisplay = GetTypeDisplayInfo(param.Type);
+<<<<<<< Updated upstream
                         var paramDetail = new ParameterDetail
                         {
                             Name = param.Name,
@@ -168,22 +164,50 @@ public class ProjectAnalyzer
                             FullyQualifiedType = typeDisplay.FullyQualifiedType,
                             IsFromBody = HasAttribute(param, "FromBody"),
                             IsFromRoute = HasAttribute(param, "FromRoute"),
-                            IsFromQuery = HasAttribute(param, "FromQuery"),
-                            IsFromHeader = HasAttribute(param, "FromHeader")
+                            IsFromQuery = HasAttribute(param, "FromQuery")
                         };
+=======
+                        var dtoProperties = new List<PropertyDetail>();
+>>>>>>> Stashed changes
 
                         // If the parameter is a user-defined class (DTO, Command, etc.)
                         // read its public properties so the generator can build request objects
                         if (param.Type is INamedTypeSymbol paramTypeSymbol
                             && IsComplexUserType(param.Type))
                         {
-                            paramDetail.DtoProperties = ReadDtoProperties(paramTypeSymbol);
+                            dtoProperties = ReadDtoProperties(paramTypeSymbol);
                         }
 
-                        endpointInfo.Parameters.Add(paramDetail);
+                        var paramDetail = new ParameterDetail(
+                            param.Name,
+                            typeDisplay.Type,
+                            typeDisplay.FullyQualifiedType,
+                            HasAttribute(param, "FromBody"),
+                            HasAttribute(param, "FromRoute"),
+                            HasAttribute(param, "FromQuery"),
+                            HasAttribute(param, "FromHeader"),
+                            dtoProperties
+                        );
+
+                        parameters.Add(paramDetail);
                     }
 
-                    controllerInfo.Endpoints.Add(endpointInfo);
+                    var endpointInfo = new EndpointInfo(
+                        member.Name,
+                        verb,
+                        GetAttributeArgument(member, verb) ?? GetAttributeArgument(member, "Route") ?? string.Empty,
+                        unwrapped,
+                        returnTypeKind,
+                        false, // HasAmbiguousReturnType
+                        member.IsAsync,
+                        (HasAttribute(member, "Authorize") || HasAttribute(classSymbol, "Authorize")) && !HasAttribute(member, "AllowAnonymous"),
+                        HasAttribute(member, "AllowAnonymous"),
+                        detectedStatusCode ?? 200,
+                        parameters,
+                        producesResponses
+                    );
+
+                    endpoints.Add(endpointInfo);
                 }
 
                 controllers.Add(controllerInfo);
@@ -210,12 +234,11 @@ public class ProjectAnalyzer
                 && setMethod.DeclaredAccessibility == Accessibility.Public)
             {
                 var typeDisplay = GetTypeDisplayInfo(member.Type);
-                list.Add(new PropertyDetail
-                {
-                    Name = member.Name,
-                    Type = typeDisplay.Type,
-                    FullyQualifiedType = typeDisplay.FullyQualifiedType
-                });
+                list.Add(new PropertyDetail(
+                    member.Name,
+                    typeDisplay.Type,
+                    typeDisplay.FullyQualifiedType
+                ));
             }
         }
 
@@ -234,170 +257,13 @@ public class ProjectAnalyzer
         foreach (var parameter in primary.Parameters)
         {
             var typeDisplay = GetTypeDisplayInfo(parameter.Type);
-            dependencies.Add(new ConstructorDependency
-            {
-                Name = parameter.Name,
-                Type = typeDisplay.FullyQualifiedType
-            });
+            dependencies.Add(new ConstructorDependency(
+                parameter.Name,
+                typeDisplay.FullyQualifiedType
+            ));
         }
 
         return dependencies;
-    }
-
-    /// <summary>
-    /// Registers the MSBuild assemblies using a robust multi-strategy waterfall.
-    ///
-    /// Strategy 1 — QueryVisualStudioInstances (SDK-first):
-    ///   Uses MSBuildLocator's built-in discovery. On most developer machines this finds
-    ///   the installed .NET SDK automatically. We prefer DotNetSdk over VS instances.
-    ///
-    /// Strategy 2 — Subprocess dotnet CLI fallback:
-    ///   If the locator finds nothing (common on CI runners, minimal Docker images,
-    ///   or machines where DOTNET_ROOT is not set as a system env-var), we run
-    ///   `dotnet --list-sdks` ourselves to discover the SDK location and call
-    ///   RegisterMSBuildPath() directly on the resolved MSBuild folder.
-    ///
-    /// This is the same pattern used by dotnet-format and other Roslyn-based tools
-    /// to work portably across every machine without requiring DOTNET_ROOT or VS.
-    /// </summary>
-    private static void RegisterMSBuild()
-    {
-        // ── Strategy 1: use the built-in locator ──────────────────────────────
-        var instances = Microsoft.Build.Locator.MSBuildLocator.QueryVisualStudioInstances().ToList();
-
-        // Prefer a .NET SDK entry (not VS); fall back to any found instance
-        var best = instances.FirstOrDefault(i =>
-                       i.DiscoveryType == Microsoft.Build.Locator.DiscoveryType.DotNetSdk)
-                   ?? instances.FirstOrDefault();
-
-        if (best != null)
-        {
-            Console.WriteLine($"[TestWire] Using MSBuild from: {best.MSBuildPath}");
-            Microsoft.Build.Locator.MSBuildLocator.RegisterInstance(best);
-            return;
-        }
-
-        // ── Strategy 2: discover SDK via `dotnet --list-sdks` subprocess ──────
-        // This covers SDK-only machines, CI runners, and any machine where the
-        // built-in discovery cannot enumerate instances from the environment.
-        Console.WriteLine("[TestWire] MSBuildLocator found no instances; falling back to dotnet CLI discovery…");
-
-        var sdkPath = TryResolveSdkPathViaCli();
-        if (sdkPath != null)
-        {
-            var msbuildPath = Path.Combine(sdkPath, "MSBuild.dll");
-            if (File.Exists(msbuildPath))
-            {
-                Console.WriteLine($"[TestWire] Registering MSBuild at: {sdkPath}");
-                Microsoft.Build.Locator.MSBuildLocator.RegisterMSBuildPath(sdkPath);
-                return;
-            }
-        }
-
-        // ── Last resort: let RegisterDefaults throw a clear error ──────────────
-        // If we reach here the .NET SDK is genuinely not installed or broken.
-        try
-        {
-            Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
-        }
-        catch (Exception inner)
-        {
-            throw new InvalidOperationException(
-                "[TestWire] Could not locate MSBuild. " +
-                "Make sure the .NET SDK is installed (https://dot.net) and that " +
-                "`dotnet --version` works in your terminal. " +
-                $"Inner error: {inner.Message}", inner);
-        }
-    }
-
-    /// <summary>
-    /// Runs `dotnet --list-sdks` and returns the directory of the highest-version SDK,
-    /// or null if the dotnet CLI is not reachable or returns nothing useful.
-    /// </summary>
-    private static string? TryResolveSdkPathViaCli()
-    {
-        try
-        {
-            var psi = new ProcessStartInfo("dotnet", "--list-sdks")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError  = true,
-                UseShellExecute        = false,
-                CreateNoWindow         = true,
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc == null) return null;
-
-            var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(5_000); // never hang the CLI for more than 5 s
-
-            // Output format from `dotnet --list-sdks`:
-            //   9.0.306 [C:\Program Files\dotnet\sdk]
-            //   10.0.100 [C:\Program Files\dotnet\sdk]
-            //
-            // The bracketed part is the BASE directory for all SDKs.
-            // The actual version folder is: [base]\[version]  e.g.
-            //   C:\Program Files\dotnet\sdk\9.0.306\MSBuild.dll
-            var sdkVersionDirs = output
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                .Select(line =>
-                {
-                    line = line.Trim();
-                    var spaceIdx = line.IndexOf(' ');
-                    if (spaceIdx < 0) return null;
-
-                    var version = line.Substring(0, spaceIdx).Trim();
-
-                    var start = line.IndexOf('[');
-                    var end   = line.IndexOf(']');
-                    if (start < 0 || end <= start) return null;
-
-                    var baseDir = line.Substring(start + 1, end - start - 1).Trim();
-
-                    // Combine base directory with the version subfolder
-                    return Path.Combine(baseDir, version);
-                })
-                .Where(d => d != null && Directory.Exists(d))
-                .ToList();
-
-            // Pick the highest semantic version SDK that:
-            // 1. actually has MSBuild.dll
-            // 2. has the same major version as the currently running .NET runtime
-            //    (e.g. if we run under net8, prefer an 8.x SDK not a 10.x one —
-            //     loading a .NET 10 MSBuild from a net8 process causes assembly
-            //     binding failures for System.Runtime v10).
-            var runtimeMajor = Environment.Version.Major;
-
-            var compatible = sdkVersionDirs
-                .Where(d => File.Exists(Path.Combine(d!, "MSBuild.dll")))
-                .Select(d =>
-                {
-                    var versionPart = Path.GetFileName(d!);
-                    Version.TryParse(versionPart, out var v);
-                    return (Path: d, Version: v ?? new Version(0, 0));
-                })
-                .OrderByDescending(x => x.Version)
-                .ToList();
-
-            // First try: same major version as the running runtime
-            var best = compatible.FirstOrDefault(x => x.Version.Major == runtimeMajor);
-
-            // Fallback: any lower major version (still safer than a newer one)
-            if (best.Path == null)
-                best = compatible.FirstOrDefault(x => x.Version.Major < runtimeMajor);
-
-            // Last fallback: whatever we have (better than nothing)
-            if (best.Path == null)
-                best = compatible.FirstOrDefault();
-
-            return best.Path;
-        }
-        catch
-        {
-            // dotnet CLI not on PATH — nothing we can do here
-            return null;
-        }
     }
 
     private static string UnwrapReturnType(ITypeSymbol typeSymbol)
@@ -406,7 +272,7 @@ public class ProjectAnalyzer
         string[] wrappers = ["Task", "ActionResult", "IActionResult"];
 
         if (typeSymbol is not INamedTypeSymbol namedType)
-            return typeSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+            return typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty);
 
         if (wrappers.Contains(namedType.Name))
         {
@@ -417,7 +283,7 @@ public class ProjectAnalyzer
                 : string.Empty; // plain Task / IActionResult — no type info
         }
 
-        return namedType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+        return namedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty);
     }
 
     private static (string Type, string FullyQualifiedType) GetTypeDisplayInfo(ITypeSymbol typeSymbol)
@@ -513,27 +379,28 @@ public class ProjectAnalyzer
             if (cleanName != "ProducesResponseType") continue;
             if (attr.ConstructorArguments.Length == 0) continue;
 
-            var detail = new ProducesResponseDetail();
-
             // Case 1: [ProducesResponseType(typeof(ProductDto), 200)]
             if (attr.ConstructorArguments[0].Kind == TypedConstantKind.Type)
             {
                 var typeSymbol = attr.ConstructorArguments[0].Value as ITypeSymbol;
-                detail.TypeName = typeSymbol?
-                    .ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+                var typeName = typeSymbol?
+                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)?.Replace("global::", string.Empty);
 
-                detail.StatusCode = attr.ConstructorArguments.Length > 1
+                var statusCode = attr.ConstructorArguments.Length > 1
                     ? (int)(attr.ConstructorArguments[1].Value ?? 200)
                     : 200;
+<<<<<<< Updated upstream
+=======
+                    
+                result.Add(new ProducesResponseDetail(statusCode, typeName));
             }
+>>>>>>> Stashed changes
             // Case 2: [ProducesResponseType(404)]
             else if (attr.ConstructorArguments[0].Kind == TypedConstantKind.Primitive)
             {
-                detail.StatusCode = (int)(attr.ConstructorArguments[0].Value ?? 200);
-                detail.TypeName = null;
+                var statusCode = (int)(attr.ConstructorArguments[0].Value ?? 200);
+                result.Add(new ProducesResponseDetail(statusCode, null));
             }
-
-            result.Add(detail);
         }
 
         return result;
@@ -591,11 +458,13 @@ public class ProjectAnalyzer
             if (typeInfo.Type is null) continue;
 
             return typeInfo.Type
-                .ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+                .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty);
         }
 
         return null;
     }
+<<<<<<< Updated upstream
+=======
     private static async Task<int?> TryInferStatusCodeFromBody(IMethodSymbol methodSymbol, Compilation compilation)
     {
 
@@ -635,16 +504,26 @@ public class ProjectAnalyzer
         }
         else return null;
 
+        int? firstFound = null;
         foreach (var invocation in invocations)
         {
             var methodName = invocation.Expression is MemberAccessExpressionSyntax memberAccess
                 ? memberAccess.Name.Identifier.Text
                 : (invocation.Expression as IdentifierNameSyntax)?.Identifier.Text;
+            
             if (methodName != null && statusCodeMap.TryGetValue(methodName, out var code))
-                return code;
+            {
+                // Bugfix: Prioritise 2xx success codes for the "happy path" over error codes.
+                // If a controller does: `if (x == null) return NotFound(); return Ok(x);`
+                // we MUST pick Ok() to generate the passing test.
+                if (code is >= 200 and < 300)
+                    return code;
+                    
+                firstFound ??= code;
+            }
         }
         
-    
-    return null;
+    return firstFound;
 }
+>>>>>>> Stashed changes
 }

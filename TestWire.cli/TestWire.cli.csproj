@@ -2,11 +2,11 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <!--
-      DisableMSBuildAssemblyCopyCheck was only needed for manual MSBuildLocator usage
-      (Roslyn 4.8 and earlier). Roslyn 4.9+ uses a BuildHost subprocess that handles
-      MSBuild discovery automatically, so this property is no longer required.
+      Required for MSBuildWorkspace to load correctly at runtime via MSBuildLocator.
+      Without this, MSBuild assembly conflicts can cause runtime errors when the tool
+      opens a .csproj. This is a known requirement for MSBuildWorkspace-based tools.
     -->
     <DisableMSBuildAssemblyCopyCheck>true</DisableMSBuildAssemblyCopyCheck>
     <AssemblyName>testwire</AssemblyName>
@@ -16,7 +16,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>testwire</ToolCommandName>
     <PackageId>testwire</PackageId>
-    <Version>0.3.0</Version>
+    <Version>0.1.2</Version>
     <Authors>Mazen Hassan</Authors>
     <Description>Generates xUnit/NUnit test stubs for ASP.NET Core controllers using Roslyn. Reads your actual controller structure and produces compilable test files with mocked dependencies.</Description>
     <PackageProjectUrl>https://github.com/mazensakr05/TestWire</PackageProjectUrl>
@@ -33,19 +33,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!--
-      Roslyn 4.9+ introduced a BuildHost subprocess architecture that discovers MSBuild
-      automatically from the installed .NET SDK without requiring manual MSBuildLocator
-      calls. This works portably across all machines regardless of SDK version.
-
-      We keep Microsoft.Build.Locator as a fallback registration path for edge cases.
-      The transitive Microsoft.Build.* packages no longer need ExcludeAssets since
-      Roslyn's BuildHost loads them out-of-process.
-    -->
-    <PackageReference Include="Microsoft.Build.Locator" Version="1.7.8" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.13.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="4.13.0" />
+    <PackageReference Include="Microsoft.Build.Locator" Version="1.11.2" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.12.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="4.12.0" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
   </ItemGroup>
 
