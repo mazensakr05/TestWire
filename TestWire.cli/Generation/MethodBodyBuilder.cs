@@ -11,6 +11,7 @@ public static class MethodBodyBuilder
         var sb = new StringBuilder();
         var testName = BuildTestName(endpoint);
         var bodyParam = endpoint.Parameters.FirstOrDefault(p => p.IsFromBody);
+        var client = endpoint.HasAuthorize ? "_authClient" : "_client";
 
         sb.AppendLine("    [Fact]");
         sb.AppendLine($"    public async Task {testName}()");
@@ -30,25 +31,25 @@ public static class MethodBodyBuilder
 
         var httpCall = endpoint.HttpVerb switch
         {
-            "HttpGet" => $"await _client.GetAsync(\"{url}\");",
-            "HttpDelete" => $"await _client.DeleteAsync(\"{url}\");",
+            "HttpGet" => $"await {client}.GetAsync(\"{url}\");",
+            "HttpDelete" => $"await {client}.DeleteAsync(\"{url}\");",
             "HttpPost" => bodyParam is not null
-                                ? $"await _client.PostAsJsonAsync(\"{url}\", request);"
-                                : $"await _client.PostAsJsonAsync(\"{url}\", new {{ }});",
+                                ? $"await {client}.PostAsJsonAsync(\"{url}\", request);"
+                                : $"await {client}.PostAsJsonAsync(\"{url}\", new {{ }});",
             "HttpPut" => bodyParam is not null
-                                ? $"await _client.PutAsJsonAsync(\"{url}\", request);"
-                                : $"await _client.PutAsJsonAsync(\"{url}\", new {{ }});",
+                                ? $"await {client}.PutAsJsonAsync(\"{url}\", request);"
+                                : $"await {client}.PutAsJsonAsync(\"{url}\", new {{ }});",
             "HttpPatch" => bodyParam is not null
-                                ? $"await _client.PatchAsJsonAsync(\"{url}\", request);"
-                                : $"await _client.PatchAsJsonAsync(\"{url}\", new {{ }});",
-            _ => $"await _client.GetAsync(\"{url}\");"
+                                ? $"await {client}.PatchAsJsonAsync(\"{url}\", request);"
+                                : $"await {client}.PatchAsJsonAsync(\"{url}\", new {{ }});",
+            _ => $"await {client}.GetAsync(\"{url}\");"
         };
 
         sb.AppendLine($"        var response = {httpCall}");
 
         var expectedStatusCode = StatusCodeToHttpStatusCode(endpoint.ExpectedStatusCode);
         sb.AppendLine($"        Assert.Equal({expectedStatusCode}, response.StatusCode);");
-        
+
         if (!string.IsNullOrEmpty(endpoint.ReturnType))
         {
             sb.AppendLine($"        var result = await response.Content.ReadFromJsonAsync<{endpoint.ReturnType}>();");
@@ -66,6 +67,7 @@ public static class MethodBodyBuilder
         var sb = new StringBuilder();
         var notFoundUrl = BuildNotFoundUrl(endpoint, baseRoute, className);
         var bodyParam = endpoint.Parameters.FirstOrDefault(p => p.IsFromBody);
+        var client = endpoint.HasAuthorize ? "_authClient" : "_client";
 
         sb.AppendLine("    [Fact]");
         sb.AppendLine($"    public async Task {endpoint.MethodName}_Returns404_WhenNotFound()");
@@ -86,13 +88,13 @@ public static class MethodBodyBuilder
         var httpCall = endpoint.HttpVerb switch
         {
             "HttpPut" => bodyParam is not null
-                                ? $"await _client.PutAsJsonAsync(\"{notFoundUrl}\", request);"
-                                : $"await _client.PutAsJsonAsync(\"{notFoundUrl}\", new {{ }});",
+                                ? $"await {client}.PutAsJsonAsync(\"{notFoundUrl}\", request);"
+                                : $"await {client}.PutAsJsonAsync(\"{notFoundUrl}\", new {{ }});",
             "HttpPatch" => bodyParam is not null
-                                ? $"await _client.PatchAsJsonAsync(\"{notFoundUrl}\", request);"
-                                : $"await _client.PatchAsJsonAsync(\"{notFoundUrl}\", new {{ }});",
-            "HttpDelete" => $"await _client.DeleteAsync(\"{notFoundUrl}\");",
-            _ => $"await _client.GetAsync(\"{notFoundUrl}\");"
+                                ? $"await {client}.PatchAsJsonAsync(\"{notFoundUrl}\", request);"
+                                : $"await {client}.PatchAsJsonAsync(\"{notFoundUrl}\", new {{ }});",
+            "HttpDelete" => $"await {client}.DeleteAsync(\"{notFoundUrl}\");",
+            _ => $"await {client}.GetAsync(\"{notFoundUrl}\");"
         };
 
         sb.AppendLine($"        var response = {httpCall}");
@@ -138,9 +140,7 @@ public static class MethodBodyBuilder
     private static string BuildTestName(EndpointInfo endpoint)
     {
         if (string.IsNullOrEmpty(endpoint.ReturnType))
-        {
             return $"{endpoint.MethodName}_Returns{endpoint.ExpectedStatusCode}";
-        }
 
         var sanitizedType = Regex.Replace(endpoint.ReturnType, @"[^a-zA-Z0-9]", "_");
         sanitizedType = Regex.Replace(sanitizedType, @"_+", "_").Trim('_');
